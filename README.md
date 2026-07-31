@@ -14,7 +14,7 @@ Sidreal Engine 2026 is a small rendering engine project intended for learning mo
 2. Open the solution file in Visual Studio
 3. Build the project and run through VS or the App executable.
 
-## Third-party libraries
+## Included Third-party libraries/tools
 - tinyGLTF
 - GLM
 - GLFW
