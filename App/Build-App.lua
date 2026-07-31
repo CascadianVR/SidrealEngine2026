@@ -15,7 +15,7 @@ project "App"
         "Source",
         "../Engine/Source",
         "../Dependencies/glfw/include",
-        "../Dependencies/SDL2/include",
+        "../Dependencies/sdl2/include",
         "../Dependencies/glm",
         "../Dependencies/glm/gtc",
         "../Dependencies/VulkanMemoryAllocator/include",
@@ -33,8 +33,9 @@ project "App"
     objdir ("../Binaries/Intermediates/" .. OutputDir .. "/%{prj.name}")
 
     postbuildcommands {
-        'if not exist "%{cfg.targetdir}\\..\\Resources" mkdir "%{cfg.targetdir}\\..\\Resources"',
-        'xcopy "%{prj.location}\\..\\Resources\\*" "%{cfg.targetdir}\\..\\Resources\\" /Q /E /Y /I > nul'
+        'if not exist "%{cfg.targetdir}\\..\\Resources" mkdir "%{cfg.targetdir}\\..\\Resources"',         -- Make resource folder if it does not exist
+        'xcopy "%{prj.location}\\..\\Resources\\*" "%{cfg.targetdir}\\..\\Resources\\" /Q /E /Y /I > nul', -- Copy all resources to build folder
+        '{COPY} "../Dependencies/SDL2/lib/x64/SDL2.dll" "%{cfg.targetdir}"' -- Copy SDL2.dll to app folder
     }
     
     filter "system:windows"

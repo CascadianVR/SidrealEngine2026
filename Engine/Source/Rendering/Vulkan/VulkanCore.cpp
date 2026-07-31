@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <array>
+#include <SDL_vulkan.h>
 #include "Window.h"
 #include "Logger.h"
 #include "glm/glm.hpp"
@@ -271,15 +272,22 @@ void VulkanCore::CreateInstance()
 	appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
 	vkEnumerateInstanceVersion(&m_apiVersion);
 	appInfo.apiVersion = m_apiVersion;
+	
+	
+	// Get SDL extensions
+	unsigned int sdlExtensionCount = 0;
+	if (!SDL_Vulkan_GetInstanceExtensions(Application::GetWindow()->GetSDLWindow(), &sdlExtensionCount, nullptr)) {
+		Logger::Error("Failed to retrieve the number of required Vulkan extensions: ", SDL_GetError());
+	}
+	std::vector<const char*> extensions(sdlExtensionCount);
+	if (!SDL_Vulkan_GetInstanceExtensions(Application::GetWindow()->GetSDLWindow(), &sdlExtensionCount, extensions.data())) {
+		Logger::Error("Failed to retrieve the required Vulkan extensions: ", SDL_GetError());
+	}
+	extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+	
 	VkInstanceCreateInfo createInfo{};
 	createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	createInfo.pApplicationInfo = &appInfo;
-
-	// Add required extensions (glfw and debug)
-	uint32_t glfwExtensionCount = 0;
-	const char **glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-	std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
-	extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 	createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
 	createInfo.ppEnabledExtensionNames = extensions.data();
 
@@ -352,19 +360,15 @@ void VulkanCore::CreateDebugCallback()
 
 void VulkanCore::CreateSurface(const Window* window)
 {
-	// C++
-	if (!glfwVulkanSupported()) {
-		throw std::runtime_error("GLFW reports Vulkan not supported on this system");
-	}
 	if (m_instance == VK_NULL_HANDLE) {
 		throw std::runtime_error("Vulkan instance is null before CreateSurface");
 	}
 	Logger::Info("Creating surface with instance: ", m_instance);
 
-	const VkResult success = glfwCreateWindowSurface(m_instance, window->GetGlfwWindow(), nullptr, &m_surface);
+	const SDL_bool success = SDL_Vulkan_CreateSurface(window->GetSDLWindow(), m_instance, &m_surface);
 
-	// Create a Vulkan surface for the GLFW window
-	if (success != VK_SUCCESS)
+	// Create a Vulkan surface for the SDL window
+	if (!success)
 	{
 		throw std::runtime_error("Failed to create window surface");
 	}
@@ -716,14 +720,12 @@ void VulkanCore::RecreateSwapChain()
 	{
 		while (width == 0 || height == 0)
 		{
-			glfwGetFramebufferSize(Application::GetWindow()->GetGlfwWindow(), &width, &height);
-			if (width == 0 || height == 0)
-			{
-				glfwWaitEvents(); // wait until window is restored
-			}
+			SDL_GetWindowSize(Application::GetWindow()->GetSDLWindow(), &width, &height);
 		}
 	}
 
+	Logger::Info("Recreating swapchain with dimensions: ", width, " x ", height);
+	
 	// Wait for device idle and cleanup old swapchain-dependent resources
 	CleanupSwapChain();
 

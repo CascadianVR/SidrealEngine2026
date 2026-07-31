@@ -12,4 +12,6 @@ int main()
 	{
 		Application::Update();
 	}
+	
+	return  0;
 }

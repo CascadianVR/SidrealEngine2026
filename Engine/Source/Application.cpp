@@ -20,4 +20,5 @@ void Application::Update()
 
 	m_window->PollEvents();
 	VulkanCore::Render();
+	m_window->ClearEvents();
 }

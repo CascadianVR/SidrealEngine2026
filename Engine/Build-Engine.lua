@@ -35,7 +35,14 @@ project "Engine"
     links {
         "glfw3",
         "slang",
-        "vulkan-1"
+        "vulkan-1",
+        "SDL2"
+    }
+
+    defines
+    {
+        "SDL_MAIN_HANDLED",
+        "SDL_STATIC"
     }
 
     targetdir ("../Binaries/" .. OutputDir .. "/%{prj.name}")
