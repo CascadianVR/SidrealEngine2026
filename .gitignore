@@ -1,0 +1,28 @@
+# Visual Studio
+*.sln
+*.vs
+*.idea
+*.github
+*.vcxproj*
+*.vcxproj.filters
+*.user
+*.ncb
+*.sdf
+*.opensdf
+*.ipch
+*.VC.db
+*.VC.VC.opendb
+
+# Build outputs
+Binaries/
+*.ilk
+*.pdb
+*.idb
+
+# Premake generated files (optional, if you want)
+*.make
+*.workspace
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,58 @@
+project "App"
+    kind "ConsoleApp"
+    language "C++"
+    cppdialect "C++20"
+    staticruntime "off"
+    debugdir "%{wks.location}"
+
+    files { "Source/**.h", "Source/**.cpp" }
+
+    includedirs
+    {
+        "Source",
+        "../Engine/Source",
+        "../Dependencies/glfw/include",
+        "../Dependencies/glm",
+        "../Dependencies/glm/gtc",
+        "../Dependencies/VulkanMemoryAllocator/include",
+        "%{os.getenv('VULKAN_SDK')}/Include"
+    }
+
+
+    links
+    {
+        "Engine"
+    }
+
+    targetdir ("../Binaries/" .. OutputDir .. "/%{prj.name}")
+    objdir ("../Binaries/Intermediates/" .. OutputDir .. "/%{prj.name}")
+
+    postbuildcommands {
+        'if not exist "%{cfg.targetdir}\\..\\Resources" mkdir "%{cfg.targetdir}\\..\\Resources"',
+        'xcopy "%{prj.location}\\..\\Resources\\*" "%{cfg.targetdir}\\..\\Resources\\" /Q /E /Y /I > nul'
+    }
+    
+    filter "system:windows"
+        systemversion "latest"
+        defines { "WINDOWS" }
+
+    filter "configurations:Debug"
+        kind "ConsoleApp"
+        runtime "Debug"
+        symbols "On"
+        defines { "DEBUG" }
+
+    filter "configurations:Release"
+        kind "ConsoleApp"
+        runtime "Release"
+        optimize "On"
+        symbols "On"
+        defines { "RELEASE" }
+
+    filter "configurations:Dist"
+        kind "WindowedApp"
+        entrypoint "mainCRTStartup"
+        runtime "Release"
+        optimize "On"
+        symbols "Off"
+        defines { "DIST" }
