@@ -4,7 +4,11 @@ project "Engine"
     cppdialect "C++20"
     staticruntime "off"
 
-    files { "Source/**.h", "Source/**.cpp" }
+    files { 
+        "Source/**.h", 
+        "Source/**.cpp",
+        "../Dependencies/tinygltf/**.cpp"
+    }
 
     defines { "GLFW_STATIC" }
 
@@ -15,6 +19,7 @@ project "Engine"
         "../Dependencies/glm",
         "../Dependencies/glm/gtc",
         "../Dependencies/VulkanMemoryAllocator/include",
+        "../Dependencies/tinygltf",
         "%{os.getenv('VULKAN_SDK')}/Include"
     }
 

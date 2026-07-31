@@ -4,7 +4,7 @@
 #include <vector>
 #include <unordered_map>
 #include "Rendering/RendererTypes.h"
-#include "Rendering/tinygltf/tiny_gltf_v3.h"
+#include "tiny_gltf_v3.h"
 
 class Loader {
 public:

@@ -5,7 +5,10 @@ project "App"
     staticruntime "off"
     debugdir "%{wks.location}"
 
-    files { "Source/**.h", "Source/**.cpp" }
+    files { 
+        "Source/**.h", 
+        "Source/**.cpp"
+    }
 
     includedirs
     {
@@ -15,6 +18,7 @@ project "App"
         "../Dependencies/glm",
         "../Dependencies/glm/gtc",
         "../Dependencies/VulkanMemoryAllocator/include",
+        "../Dependencies/tinygltf",
         "%{os.getenv('VULKAN_SDK')}/Include"
     }
 
