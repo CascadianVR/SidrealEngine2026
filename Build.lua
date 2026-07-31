@@ -1,6 +1,6 @@
 -- premake5.lua
 workspace "Sidreal2026"
-   architecture "x86_64"
+   architecture "x64"
    configurations { "Debug", "Release", "Dist" }
    startproject "App"
 

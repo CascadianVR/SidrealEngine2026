@@ -53,5 +53,5 @@ float4 main(VSOutput input) : SV_TARGET
 {
     float3 lightDir = float3(0.5f, -0.5f, 0.5f);
     float3 normal = normalize(input.normal);
-    return float4(normal, 1.0);
+    return float4(normal * 0.5 + 0.5, 1.0);
 }

@@ -15,6 +15,7 @@ project "App"
         "Source",
         "../Engine/Source",
         "../Dependencies/glfw/include",
+        "../Dependencies/SDL2/include",
         "../Dependencies/glm",
         "../Dependencies/glm/gtc",
         "../Dependencies/VulkanMemoryAllocator/include",

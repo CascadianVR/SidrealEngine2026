@@ -16,6 +16,7 @@ project "Engine"
     {
         "Source",
         "../Dependencies/glfw/include",
+        "../Dependencies/SDL2/include",
         "../Dependencies/glm",
         "../Dependencies/glm/gtc",
         "../Dependencies/VulkanMemoryAllocator/include",
@@ -27,6 +28,7 @@ project "Engine"
     {
         "../Dependencies/slang/lib",
         "../Dependencies/glfw",
+        "../Dependencies/SDL2/lib/x64",
         "%{os.getenv('VULKAN_SDK')}/Lib"
     }
 
