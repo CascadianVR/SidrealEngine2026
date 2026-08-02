@@ -37,7 +37,6 @@ private:
 	static inline bool m_requireSwapchainRecreate = false;
 	static inline std::vector<FrameResource> m_frameResources;
 	static inline VkSemaphore m_timelineSemaphore;
-
 	static inline uint32_t m_apiVersion;
 
 	// Descriptor and texture resources for the default texture used by shaders

@@ -1,15 +1,20 @@
 #include "Application.h"
+
+#include "Input.h"
 #include "Rendering/Vulkan/VulkanCore.h"
 #include "Rendering/Loader.h"
 
 void Application::Initialize()
 {
 	m_lastTime = std::chrono::system_clock::now();
+	
 	m_window = std::make_unique<Window>(1280, 720, "Vulkan Window");
 	m_window->Show();
 	VulkanCore::Initialize(m_window.get());
 
-	Loader::LoadScene("Resources/Scenes/DefaultScene.json");
+	Input::Initialize(m_window.get());
+	
+	Loader::LoadScene("Resources\\Scenes\\DefaultScene.json");
 }
 
 void Application::Update()
@@ -22,6 +27,7 @@ void Application::Update()
 	m_elapsedTime += m_deltaTime;
 
 	m_window->PollEvents();
+	Input::Update();
 	VulkanCore::Render();
 	m_window->ClearEvents();
 }

@@ -8,7 +8,7 @@ public:
 	Window() = delete;
 	Window(int width, int height, const char* title);
 	~Window();
-	
+
 	Window(const Window&) = delete;
 	Window& operator=(const Window&) = delete;
 	Window(Window&&) = delete;
@@ -20,14 +20,18 @@ public:
 	void ClearEvents();
 	bool ShouldClose() const;
 	bool WasResized() const;
+	
 	unsigned int GetWidth() const { return m_width; }
 	unsigned int GetHeight() const { return m_height; }
 	SDL_Window* GetSDLWindow() const;
+	
+	void SetShouldClose(bool shouldClose);
+	
 private:
 	bool m_windowResized = false;
+	bool m_shouldClose = false;
 	int m_height = 0;
 	int m_width = 0;
-	int m_shouldClose = 0;
 	
 	SDL_Event m_event;
 	SDL_Window* m_window = nullptr;

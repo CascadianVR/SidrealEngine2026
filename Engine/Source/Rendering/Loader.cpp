@@ -89,43 +89,81 @@ void Loader::LoadScene(const std::string& fileName)
 		modelMatrix = glm::scale(modelMatrix, modelScale);
 		
 		Logger::Info("Loading model: ", modelPath);
-		Model model = { .modelMatrix = modelMatrix };
-		m_loadedModels.try_emplace(modelPath, model);
+		LoadGLB(modelPath, modelMatrix);
 	}
 	
-	LoadAllAssets();
+	for (int i = 0; i < 5; i++)
+	{
+		for (int j = 0; j < 5; j++)
+		{
+			for (int k = 0; k < 5; k++)
+			{
+				glm::vec3 position = { static_cast<float>(i) * 1.0f, static_cast<float>(j) * 1.7f, static_cast<float>(k) * -1.0f };
+				glm::vec3 rotation = { 0.0f, 0.0f, 0.0f };
+				glm::vec3 scale = { 1.0f, 1.0f, 1.0f };
+				modelMatrix = glm::translate(glm::mat4(1.0f), position);
+				modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+				modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+				modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+				modelMatrix = glm::scale(modelMatrix, scale);
+				LoadGLB("Resources\\Models\\Cascadia.glb", modelMatrix);
+			}
+		}
+	}
+	
+	for (int i = 0; i < 5; i++)
+	{
+		for (int j = 0; j < 5; j++)
+		{
+			for (int k = 0; k < 5; k++)
+			{
+				glm::vec3 position = { -static_cast<float>(i) * 1.0f - 3.0f, static_cast<float>(j) * 1.7f, static_cast<float>(k) * -1.0f };
+				glm::vec3 rotation = { 0.0f, 0.0f, 0.0f };
+				glm::vec3 scale = { 1.0f, 1.0f, 1.0f };
+				modelMatrix = glm::translate(glm::mat4(1.0f), position);
+				modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+				modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+				modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+				modelMatrix = glm::scale(modelMatrix, scale);
+				LoadGLB("Resources\\Models\\ThickBase5.glb", modelMatrix);
+			}
+		}
+	}
+	
+	CreateDataBuffers();
 }
 
-void Loader::LoadAllAssets()
+void Loader::CreateDataBuffers()
 {
-	// First load all of the 3d model files into memory
-    for (auto& [name, model] : m_loadedModels) {
-		Logger::Info("Loading model: ", name);
-		LoadGLB(name, model);
-	}
-
-	// Then create the global vertex and index buffers for all of the loaded models
+	// TCreate the global vertex and index buffers for all the loaded models
 	CreateVertexBuffer();
 	CreateIndexBuffer();
+	CreateInstanceDataBuffer();
+	CreateRenderDataBuffer();
 }
 
-void Loader::LoadGLB(const std::string& fileName, Model& model)
+void Loader::LoadGLB(const std::string& fileName, glm::mat4& modelMatrix)
 {
-	//if (m_loadedModels.contains(fileName))
-	//{
-	//	Logger::Warn("Model already loaded: ", fileName);
-	//	return;
-	//}
-
-	Logger::Info("Loading GLB file: ", fileName);
-
+	if (m_modelAssetLookup.find(fileName) != m_modelAssetLookup.end())
+	{
+		//Logger::Warn("Model '", fileName, "' already loaded, adding instanced version.");
+		
+		Model& model = m_loadedModels[m_modelAssetLookup[fileName]];
+		model.instanceCount += 1;
+		model.instanceMatrices.push_back(modelMatrix);
+		
+		return;
+	}
+	
 	// Load the GLB file into memory
 	std::ifstream file(fileName, std::ios::binary | std::ios::ate);
 	if (!file)
 	{
-		Logger::Error("Failed to open file: ", fileName);
+		Logger::Warn("Failed to open file: ", fileName);
 		return;
 	}
+	
+	Logger::Info("Loading GLB file: ", fileName);
 
 	std::streamsize size = file.tellg();
 	if (size < 0)
@@ -169,23 +207,24 @@ void Loader::LoadGLB(const std::string& fileName, Model& model)
 	}
 
 
-	Logger::Info("Model has ", gltfModel.meshes_count, " meshes.");
+	//Logger::Info("Model has ", gltfModel.meshes_count, " meshes.");
+	Model model{};
 	for (uint32_t i = 0; i < gltfModel.meshes_count; ++i)
 	{
-		Logger::Info("Processing mesh ", i, ": ", gltfModel.meshes[i].name.data);
+		//Logger::Info("Processing mesh ", i, ": ", gltfModel.meshes[i].name.data);
 		const tg3_mesh& gltfMesh = gltfModel.meshes[i];
 		for (uint32_t j = 0; j < gltfMesh.primitives_count; ++j)
 		{
 
-			Logger::Info("Processing primitive ", j, " of mesh ", i);
+			//Logger::Info("Processing primitive ", j, " of mesh ", i);
 			const tg3_primitive& primitive = gltfMesh.primitives[j];
 
 			// List all attributes of the primitive
-			Logger::Info("Primitive ", j, " has ", primitive.attributes_count, " attributes.");
+			//Logger::Info("Primitive ", j, " has ", primitive.attributes_count, " attributes.");
 			for (uint32_t k = 0; k < primitive.attributes_count; ++k)
 			{
 				const tg3_str_int_pair& attribute = primitive.attributes[k];
-				Logger::Info("  Attribute ", k, ": Name: ", attribute.key.data, ", Accessor Index: ", attribute.value);
+				//Logger::Info("  Attribute ", k, ": Name: ", attribute.key.data, ", Accessor Index: ", attribute.value);
 			}
 			
 			Mesh mesh;
@@ -196,6 +235,11 @@ void Loader::LoadGLB(const std::string& fileName, Model& model)
 		}
 	}
 
+	model.name = fileName;
+	model.instanceMatrices[0] = modelMatrix;
+	m_loadedModels.push_back(model);
+	m_modelAssetLookup[fileName] = static_cast<uint32_t>(m_loadedModels.size() - 1);
+	
 	Logger::Success("Loaded GLB file: ", fileName);
 }
 
@@ -226,6 +270,8 @@ void Loader::GetVertexData(const tg3_model& model, const tg3_primitive& primitiv
 	const uint8_t* uvData = uvBuffer.data.data + uvBufferView.byte_offset + uvAccessor.byte_offset;
 	const uint32_t uvStride = uvBufferView.byte_stride != 0 ? uvBufferView.byte_stride : static_cast<uint32_t>(sizeof(glm::vec2));
 
+	mesh.vertices.reserve(positionAccessor.count);
+	
 	// Assuming the accessor type is VEC3 and component type is FLOAT
 	for (uint32_t v = 0; v < positionAccessor.count; v++)
 	{
@@ -247,8 +293,7 @@ void Loader::GetVertexData(const tg3_model& model, const tg3_primitive& primitiv
 	mesh.vertexCount = static_cast<uint32_t>(mesh.vertices.size());
 }
 
-void Loader::GetIndexData(const tg3_model& model, const uint32_t accessorIndex, Mesh& mesh)
-{
+void Loader::GetIndexData(const tg3_model& model, const uint32_t accessorIndex, Mesh& mesh) {
 	// Load vertex positions from the first accessor of the first primitive
 	const tg3_accessor& accessor = model.accessors[accessorIndex];
 	const tg3_buffer_view& bufferView = model.buffer_views[accessor.buffer_view];
@@ -258,41 +303,25 @@ void Loader::GetIndexData(const tg3_model& model, const uint32_t accessorIndex, 
 
 	mesh.indices.resize(accessor.count);
 
-	Logger::Info("Index type: ", accessor.component_type);
+	//Logger::Info("Index type: ", accessor.component_type);
 	switch (accessor.component_type)
 	{
-		case TG3_COMPONENT_TYPE_UNSIGNED_BYTE:
-		{
-			const uint8_t* src = reinterpret_cast<const uint8_t*>(data);
-
-			for (uint32_t i = 0; i < accessor.count; i++)
-				mesh.indices[i] = src[i];
-
+		case TG3_COMPONENT_TYPE_UNSIGNED_BYTE: {
+			const uint8_t* src = data;
+			for (uint32_t i = 0; i < accessor.count; i++) mesh.indices[i] = src[i];
 			break;
 		}
-
-		case TG3_COMPONENT_TYPE_UNSIGNED_SHORT:
-		{
+		case TG3_COMPONENT_TYPE_UNSIGNED_SHORT: {
 			const uint16_t* src = reinterpret_cast<const uint16_t*>(data);
-
-			for (uint32_t i = 0; i < accessor.count; i++)
-				mesh.indices[i] = src[i];
-
+			for (uint32_t i = 0; i < accessor.count; i++) mesh.indices[i] = src[i];
 			break;
 		}
-
-		case TG3_COMPONENT_TYPE_UNSIGNED_INT:
-		{
+		case TG3_COMPONENT_TYPE_UNSIGNED_INT: {
 			const uint32_t* src = reinterpret_cast<const uint32_t*>(data);
-
-			for (uint32_t i = 0; i < accessor.count; i++)
-				mesh.indices[i] = src[i];
-
+			for (uint32_t i = 0; i < accessor.count; i++) mesh.indices[i] = src[i];
 			break;
 		}
-
-		default:
-		{
+		default:{
 			Logger::Error("Unsupported index component type.");
 			mesh.indices.clear();
 			break;
@@ -303,14 +332,25 @@ void Loader::GetIndexData(const tg3_model& model, const uint32_t accessorIndex, 
 }
 
 void Loader::CreateVertexBuffer() {
-	std::vector<Vertex> vertices;
-	
-	for (auto& val : m_loadedModels | std::views::values)
+	size_t totalVertexCount = 0;
+	for (const auto& model : m_loadedModels)
 	{
-		for (auto& mesh : val.meshes)
+		for (const auto& mesh : model.meshes)
+		{
+			totalVertexCount += mesh.vertices.size();
+		}
+	}
+	
+	std::vector<Vertex> vertices;
+	vertices.reserve(totalVertexCount);
+	
+	for (auto& model : m_loadedModels)
+	{
+		for (auto& mesh : model.meshes)
 		{
 			vertices.insert(vertices.end(), mesh.vertices.begin(), mesh.vertices.end());
 			mesh.vertexOffset = static_cast<uint32_t>(vertices.size()) - mesh.vertexCount; // Set the vertex offset for this mesh
+			mesh.vertices.clear();
 		}
 	}
 	
@@ -345,18 +385,31 @@ void Loader::CreateVertexBuffer() {
 	addressInfo.buffer = m_vertexBuffer;
 
 	m_pushConstants.vertexBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
+	
+	Logger::Success("Created vertex buffer");
 }
 
 void Loader::CreateIndexBuffer() {
+	size_t totalIndexCount = 0;
+	for (const auto& model : m_loadedModels)
+	{
+		for (const auto& mesh : model.meshes)
+		{
+			totalIndexCount += mesh.indices.size();
+		}
+	}
+	
 	std::vector<uint32_t> indices;
+	indices.reserve(totalIndexCount);
 	
 	// Loop through all models and meshes and accumulate all indices
-	for (auto& val : m_loadedModels | std::views::values)
+	for (auto& model : m_loadedModels)
 	{
-		for (auto& mesh : val.meshes)
+		for (auto& mesh : model.meshes)
 		{
 			indices.insert(indices.end(), mesh.indices.begin(), mesh.indices.end());
 			mesh.indexOffset = static_cast<uint32_t>(indices.size()) - mesh.indexCount; // Set the index offset for this mesh
+			mesh.indices.clear();
 		}
 	}
 	
@@ -391,6 +444,117 @@ void Loader::CreateIndexBuffer() {
 	addressInfo.buffer = m_indexBuffer;
 
 	m_pushConstants.indexBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
+	
+	Logger::Success("Created index buffer");
+}
+
+void Loader::CreateRenderDataBuffer()
+{
+	// Create vector of draw command data
+	m_renderData.clear();
+	for (const auto& model : m_loadedModels)
+	{
+		for (const auto& mesh : model.meshes)
+		{
+			m_renderData.emplace_back(RenderData{
+				.vertexOffset = mesh.vertexOffset,
+				.indexOffset = mesh.indexOffset,
+				.indexCount = mesh.indexCount,
+				.instanceOffset = model.instanceOffset,
+				.instanceCount = model.instanceCount,
+			});
+		}
+	}
+	
+	// Upload to GPU
+	const VkDeviceSize drawCommandBufferSize{ sizeof(RenderData) * m_renderData.size() };
+	VkBufferCreateInfo bufferCreateInfo {};
+	bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferCreateInfo.size = drawCommandBufferSize;
+	bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT; // For staging use VK_BUFFER_USAGE_TRANSFER_DST_BIT
+
+	VmaAllocationCreateInfo bufferAllocationCreateInfo {};
+	bufferAllocationCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+	bufferAllocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+
+	VmaAllocationInfo indexBufferAllocationInfo{};
+	if (vmaCreateBuffer(VulkanCore::GetAllocator(), &bufferCreateInfo, &bufferAllocationCreateInfo, &m_renderDataBuffer, &m_renderDataBufferAllocation, &indexBufferAllocationInfo) != VK_SUCCESS)
+	{
+		Logger::Error("Failed to create index buffer for primitive");
+		return;
+	}
+	
+	// Copy index data into the mapped allocation
+	if (drawCommandBufferSize > 0) {
+		memcpy(indexBufferAllocationInfo.pMappedData, m_renderData.data(), drawCommandBufferSize);
+	}
+
+	// Flush to make non-coherent memory visible to the GPU
+	vmaFlushAllocation(VulkanCore::GetAllocator(), m_renderDataBufferAllocation, 0, drawCommandBufferSize);
+	
+	// Get address of gpu buffer
+	VkBufferDeviceAddressInfo addressInfo{};
+	addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+	addressInfo.buffer = m_renderDataBuffer;
+	
+	m_pushConstants.renderDataBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
+	
+	Logger::Success("Created render data buffer");
+}
+
+void Loader::CreateInstanceDataBuffer() {
+	// Create vector of draw command data
+	m_instanceData.clear();
+	for (auto& model : m_loadedModels)
+	{
+		for (const auto& mesh : model.meshes)
+		{
+			model.instanceOffset = static_cast<uint32_t>(m_instanceData.size());
+			
+			for (uint32_t i = 0; i < model.instanceCount; ++i)
+			{
+				InstanceData instanceData{
+					.modelMatrix = model.instanceMatrices[i]
+				};
+				m_instanceData.emplace_back(instanceData);
+			}
+		}
+	}
+	
+	// Upload to GPU
+	const VkDeviceSize bufferSize{ sizeof(InstanceData) * m_instanceData.size() };
+	VkBufferCreateInfo bufferCreateInfo {};
+	bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferCreateInfo.size = bufferSize;
+	bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT; // For staging use VK_BUFFER_USAGE_TRANSFER_DST_BIT
+
+	VmaAllocationCreateInfo bufferAllocationCreateInfo {};
+	bufferAllocationCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+	bufferAllocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+
+	VmaAllocationInfo bufferAllocationInfo{};
+	if (vmaCreateBuffer(VulkanCore::GetAllocator(), &bufferCreateInfo, &bufferAllocationCreateInfo, &dataBuffer, &m_instanceDataBufferAllocation, &bufferAllocationInfo) != VK_SUCCESS)
+	{
+		Logger::Error("Failed to create index buffer for primitive");
+		return;
+	}
+	
+	// Copy index data into the mapped allocation
+	if (bufferSize > 0) {
+		memcpy(bufferAllocationInfo.pMappedData, m_instanceData.data(), bufferSize);
+	}
+
+	// Flush to make non-coherent memory visible to the GPU
+	vmaFlushAllocation(VulkanCore::GetAllocator(), m_instanceDataBufferAllocation, 0, bufferSize);
+	
+	// Get address of gpu buffer
+	VkBufferDeviceAddressInfo addressInfo{};
+	addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+	addressInfo.buffer = dataBuffer;
+	
+	m_pushConstants.instanceDataBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
+	
+	Logger::Success("Created instance data buffer");
 }
 
 int Loader::GetAccessorIndex(const tg3_primitive &primitive, const char* accessorName)

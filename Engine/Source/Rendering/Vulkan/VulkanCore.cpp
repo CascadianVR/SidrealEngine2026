@@ -14,6 +14,16 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include "Input.h"
+
+float yaw = -90.0f;
+float pitch = 0.0f;
+	
+// 1. Setup initial camera vectors
+glm::vec3 cameraPos   = glm::vec3(0.0f, 1.0f, 0.0f);
+glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
+glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+
 void VulkanCore::Initialize(const Window* window)
 {
 	CreateInstance();
@@ -133,7 +143,7 @@ void VulkanCore::Render()
 		.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
 		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 		.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-		.clearValue = {.depthStencil = {1.0f,  0}}
+		.clearValue = {.depthStencil = {.depth = 1.0f,  .stencil = 0}}
 	};
 
 	VkRenderingInfo renderingInfo{
@@ -156,23 +166,41 @@ void VulkanCore::Render()
 		.pDepthAttachment = &depthAttachmentInfo,
 	};
 	
-	std::unordered_map<std::string, Model> models = Loader::GetLoadedModels();
-	Model& model = models["Resources\\Models\\Cascadia.glb"];
-
 	Pipeline& pipeline = PipelineManager::GetPipeline("Resources/Shaders/shader2.slang");
 	
-	glm::mat4 view = glm::lookAt(glm::vec3(0, 0, 0), glm::vec3(0, 0, -1), glm::vec3(0, 1, 0));
+	// Camera look
+	yaw += static_cast<float>(Input::deltaMouseX) * 0.1f;
+	pitch += -static_cast<float>(Input::deltaMouseY) * 0.1f;
+	glm::vec3 front;
+	front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+	front.y = sin(glm::radians(pitch));
+	front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+	cameraFront = glm::normalize(front);
+	
+	// Camera Move
+	constexpr float speed = 0.015f;
+	glm::vec3 cameraOffset{ 0.0f, 0.0f, 0.0f };
+	glm::vec3 right =
+	glm::normalize(glm::cross(cameraFront, glm::vec3(0, 1, 0)));
+	glm::vec3 up = glm::vec3(0, 1, 0);
+	if (Input::wKeyPressed) cameraOffset += cameraFront;
+	if (Input::sKeyPressed) cameraOffset -= cameraFront;
+	if (Input::aKeyPressed) cameraOffset -= right;
+	if (Input::dKeyPressed) cameraOffset += right;
+	if (Input::qKeyPressed) cameraOffset -= up;
+	if (Input::eKeyPressed) cameraOffset += up;
+	if (glm::length(cameraOffset) > 0.0f) cameraPos += glm::normalize(cameraOffset) * speed;
+	
+	// Calculate view and projection
+	glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
 	glm::mat4 projection = glm::perspectiveFov(glm::radians(45.0f), static_cast<float>(window->GetWidth()), static_cast<float>(window->GetHeight()), 0.1f, 100.0f);
 
+	// Push constants for camera
 	PushConstants& pushConstants = Loader::GetPushConstants();
 	pushConstants.viewProjection = projection * view;
-	pushConstants.model = model.modelMatrix;
-	pushConstants.model = glm::rotate(pushConstants.model, glm::radians(static_cast<float>(Application::GetElapsedTime()) * 100.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-	
 	vkCmdPushConstants(frameResource.commandBuffer, pipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), &pushConstants);
 	
 	vkCmdBeginRendering(frameResource.commandBuffer, &renderingInfo);
-
 
 	VkViewport viewport{};
 	viewport.x = 0;
@@ -185,23 +213,21 @@ void VulkanCore::Render()
 
 	VkRect2D scissor{};
 	scissor.extent = { 
-		.width = static_cast<uint32_t>(window->GetWidth()),
-		.height = static_cast<uint32_t>(window->GetHeight())
+		.width = window->GetWidth(),
+		.height = window->GetHeight()
 	};
 	vkCmdSetScissor(frameResource.commandBuffer, 0, 1, &scissor);
 
 	vkCmdBindPipeline(frameResource.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline);
 
-
-	for (const Mesh& mesh : model.meshes)
+	// Draw each mesh
+	std::vector<RenderData> renderData = Loader::GetRenderData();
+	for (size_t i = 0; i < renderData.size(); i++)
 	{
-		pushConstants.vertexOffset = mesh.vertexOffset;
-		pushConstants.indexOffset = mesh.indexOffset;
-		vkCmdPushConstants(frameResource.commandBuffer, pipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), &pushConstants);
-		vkCmdDraw(frameResource.commandBuffer, mesh.indexCount, 1, 0, 0);
+		RenderData& data = renderData[i];
+		vkCmdDraw(frameResource.commandBuffer, data.indexCount, data.instanceCount, 0, static_cast<uint32_t>(i));
 	}
-	//vkCmdDraw(frameResource.commandBuffer, mesh.indexCount, 1, 0, 0);
-
+	
 	vkCmdEndRendering(frameResource.commandBuffer);
 
 	VkImageMemoryBarrier2 barrierPresent{};
@@ -227,10 +253,10 @@ void VulkanCore::Render()
 		throw std::runtime_error("Failed to record command buffer");
 	}
 
-	VkSemaphoreSubmitInfo semaphoreAquireWaitInfo{};
-	semaphoreAquireWaitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-	semaphoreAquireWaitInfo.semaphore = imageAquireSemaphore;
-	semaphoreAquireWaitInfo.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+	VkSemaphoreSubmitInfo semaphoreAcquireWaitInfo{};
+	semaphoreAcquireWaitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+	semaphoreAcquireWaitInfo.semaphore = imageAquireSemaphore;
+	semaphoreAcquireWaitInfo.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
 
 	std::array<VkSemaphoreSubmitInfo, 2> semaphoreSignals{
 		VkSemaphoreSubmitInfo{
@@ -253,7 +279,7 @@ void VulkanCore::Render()
 	VkSubmitInfo2 submitInfo{};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
 	submitInfo.waitSemaphoreInfoCount = 1;
-	submitInfo.pWaitSemaphoreInfos = &semaphoreAquireWaitInfo;
+	submitInfo.pWaitSemaphoreInfos = &semaphoreAcquireWaitInfo;
 	submitInfo.commandBufferInfoCount = 1;
 	submitInfo.pCommandBufferInfos = &commandBufferSubmitInfo;
 	submitInfo.signalSemaphoreInfoCount = static_cast<uint32_t>(semaphoreSignals.size());

@@ -13,34 +13,50 @@ struct Vertex {
     glm::vec4 uv;
 };
 
-struct PushConstants {
-	VkDeviceAddress vertexBufferDeviceAddress;
-	VkDeviceAddress indexBufferDeviceAddress;
-	glm::mat4 viewProjection;
-	glm::mat4 model;
-	uint32_t vertexOffset;
-	uint32_t indexOffset;
-};
-
 struct Mesh {
 	std::vector<Vertex> vertices = std::vector<Vertex>();
-	uint32_t vertexCount;
-	uint32_t vertexOffset;
 	std::vector<uint32_t> indices = std::vector<uint32_t>();
+	uint32_t vertexCount;
 	uint32_t indexCount;
+	uint32_t vertexOffset;
 	uint32_t indexOffset;
-	uint32_t materialIndex;
 };
 
 struct Model {
+	std::string name;
 	std::vector<Mesh> meshes = std::vector<Mesh>();
-	glm::mat4 modelMatrix;
+	std::vector<glm::mat4> instanceMatrices = std::vector( { glm::mat4(1.0f) } );
+	uint32_t instanceCount = 1;
+	uint32_t instanceOffset;
+};
+
+// Per-Instance Data
+struct InstanceData {
+	glm::mat4 modelMatrix; // Transform of this instance
+};
+
+// Per-Mesh Render Data
+struct RenderData
+{
+	uint32_t vertexOffset;   // Offset in the vertex buffer
+	uint32_t indexOffset;    // Offset in the index buffer
+	uint32_t indexCount;     // Number of indices in this mesh
+	uint32_t instanceOffset; // Offset in the instance buffer
+	uint32_t instanceCount;  // Number of instances to render
 };
 
 struct Pipeline {
 	std::string fileName;
 	VkPipeline pipeline{ VK_NULL_HANDLE };
 	VkPipelineLayout pipelineLayout{ VK_NULL_HANDLE };
+};
+
+struct PushConstants {
+	VkDeviceAddress vertexBufferDeviceAddress;
+	VkDeviceAddress indexBufferDeviceAddress;
+	VkDeviceAddress renderDataBufferDeviceAddress;
+	VkDeviceAddress instanceDataBufferDeviceAddress;
+	glm::mat4 viewProjection;
 };
 
 struct ShaderData {

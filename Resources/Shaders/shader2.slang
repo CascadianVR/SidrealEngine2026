@@ -5,14 +5,27 @@ struct Vertex
     float4 uv;
 };
 
-struct PushConstants
+// Per-Instance Data
+struct InstanceData {
+    float4x4 modelMatrix; // Transform of this instance
+};
+
+// Per-Mesh Render Data
+struct RenderData
 {
+    uint32_t vertexOffset;   // Offset in the vertex buffer
+    uint32_t indexOffset;    // Offset in the index buffer
+    uint32_t indexCount;     // Number of indices in this mesh
+    uint32_t instanceOffset; // Offset in the instance buffer
+    uint32_t instanceCount;  // Number of instances to render
+};
+
+struct PushConstants {
     uint64_t vertexBuffer;
     uint64_t indexBuffer;
+    uint64_t renderDataBuffer;
+    uint64_t instanceDataBuffer;
     float4x4 viewProjection;
-    float4x4 model;
-    uint32_t vertexOffset;
-    uint32_t indexOffset;
 };
 
 [[vk::push_constant]]
@@ -27,23 +40,30 @@ struct VSOutput
 };
 
 [shader("vertex")]
-VSOutput main(uint32_t vertexID : SV_VertexID)
+VSOutput main(uint32_t vertexID: SV_VertexID, uint32_t instanceID: SV_InstanceID, uint32_t firstInstance: SV_StartInstanceLocation)
 {
     VSOutput output;
 
-    Vertex *vertices = (Vertex *)gPushConstants.vertexBuffer;
-    uint32_t *indices = (uint32_t*)gPushConstants.indexBuffer;
+    // Get buffers from push constants
+    Vertex* vertices = (Vertex *)gPushConstants.vertexBuffer;
+    uint32_t* indices = (uint32_t*)gPushConstants.indexBuffer;
+    RenderData* renderDataBuffer = (RenderData*)gPushConstants.renderDataBuffer;
+    InstanceData* instanceBuffer = (InstanceData*)gPushConstants.instanceDataBuffer;
 
-    uint32_t index = indices[vertexID + gPushConstants.indexOffset];
-    Vertex v = vertices[index + gPushConstants.vertexOffset];
+    RenderData renderData = renderDataBuffer[firstInstance];
+    InstanceData instance = instanceBuffer[renderData.instanceOffset + instanceID];
+
+    // Get vertex by calculating the index from the index buffer
+    uint32_t index = indices[renderData.indexOffset + vertexID];
+    Vertex v = vertices[renderData.vertexOffset + index];
 
     // Object space -> world space
-    float4 worldPosition = mul(gPushConstants.model, float4(v.position.xyz, 1.0));
+    float4 worldPosition = mul(instance.modelMatrix, float4(v.position.xyz, 1.0));
     
     // World space -> clip space
     output.position = mul(gPushConstants.viewProjection, worldPosition);
-    
-    output.normal = v.normal.xyz;
+
+    output.normal = normalize(mul((float3x3)instance.modelMatrix, v.normal.xyz));
     output.uv = v.uv.xy;
     output.worldPos = worldPosition;
 

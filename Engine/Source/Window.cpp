@@ -1,4 +1,8 @@
 #include "Window.h"
+
+#include <string>
+
+#include "Application.h"
 #include "Logger.h"
 
 Window::Window(const int width, const int height, const char* title)
@@ -62,6 +66,9 @@ void Window::Hide() const
 
 void Window::PollEvents()
 {
+	const std::string title = "Sidreal Engine - " + std::to_string(Application::GetDeltaTime() * 1000.0f);
+	SDL_SetWindowTitle(m_window, title.c_str());
+	
 	m_windowResized = false;
 	while (SDL_PollEvent(&m_event))
 	{
@@ -112,4 +119,9 @@ void Window::ClearEvents()
 SDL_Window* Window::GetSDLWindow() const
 {
 	return m_window;
+}
+
+void Window::SetShouldClose(bool shouldClose)
+{
+	m_shouldClose = shouldClose;
 }
