@@ -221,11 +221,11 @@ void Loader::LoadGLB(const std::string& fileName, glm::mat4& modelMatrix)
 
 			// List all attributes of the primitive
 			//Logger::Info("Primitive ", j, " has ", primitive.attributes_count, " attributes.");
-			for (uint32_t k = 0; k < primitive.attributes_count; ++k)
-			{
-				const tg3_str_int_pair& attribute = primitive.attributes[k];
-				//Logger::Info("  Attribute ", k, ": Name: ", attribute.key.data, ", Accessor Index: ", attribute.value);
-			}
+			//for (uint32_t k = 0; k < primitive.attributes_count; ++k)
+			//{
+			//	const tg3_str_int_pair& attribute = primitive.attributes[k];
+			//	Logger::Info("  Attribute ", k, ": Name: ", attribute.key.data, ", Accessor Index: ", attribute.value);
+			//}
 			
 			Mesh mesh;
 			GetVertexData(gltfModel, primitive, mesh);
