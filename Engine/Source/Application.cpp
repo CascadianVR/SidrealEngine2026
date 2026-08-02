@@ -1,5 +1,6 @@
 #include "Application.h"
 #include "Rendering/Vulkan/VulkanCore.h"
+#include "Rendering/Loader.h"
 
 void Application::Initialize()
 {
@@ -7,6 +8,8 @@ void Application::Initialize()
 	m_window = std::make_unique<Window>(1280, 720, "Vulkan Window");
 	m_window->Show();
 	VulkanCore::Initialize(m_window.get());
+
+	Loader::LoadAllAssets();
 }
 
 void Application::Update()

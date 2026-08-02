@@ -18,21 +18,18 @@ struct PushConstants {
 	VkDeviceAddress indexBufferDeviceAddress;
 	glm::mat4 viewProjection;
 	glm::mat4 model;
+	uint32_t vertexOffset;
+	uint32_t indexOffset;
 };
 
 struct Mesh {
 	std::vector<Vertex> vertices = std::vector<Vertex>();
-	std::vector<uint32_t> indices = std::vector<uint32_t>();
 	uint32_t vertexCount;
+	uint32_t vertexOffset;
+	std::vector<uint32_t> indices = std::vector<uint32_t>();
 	uint32_t indexCount;
+	uint32_t indexOffset;
 	uint32_t materialIndex;
-	
-	// Vulkan stuffs
-	VkBuffer vertexBuffer = VK_NULL_HANDLE;
-	VkBuffer indexBuffer = VK_NULL_HANDLE;
-	VmaAllocation vertexBufferAllocation = VK_NULL_HANDLE;
-	VmaAllocation indexBufferAllocation = VK_NULL_HANDLE;
-	PushConstants pushConstants{};
 };
 
 struct Model {

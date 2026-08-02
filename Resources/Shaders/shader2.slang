@@ -11,6 +11,8 @@ struct PushConstants
     uint64_t indexBuffer;
     float4x4 viewProjection;
     float4x4 model;
+    uint32_t vertexOffset;
+    uint32_t indexOffset;
 };
 
 [[vk::push_constant]]
@@ -32,8 +34,8 @@ VSOutput main(uint32_t vertexID : SV_VertexID)
     Vertex *vertices = (Vertex *)gPushConstants.vertexBuffer;
     uint32_t *indices = (uint32_t*)gPushConstants.indexBuffer;
 
-    uint32_t index = indices[vertexID];
-    Vertex v = vertices[index];
+    uint32_t index = indices[vertexID + gPushConstants.indexOffset];
+    Vertex v = vertices[index + gPushConstants.vertexOffset];
 
     // Object space -> world space
     float4 worldPosition = mul(gPushConstants.model, float4(v.position.xyz, 1.0));

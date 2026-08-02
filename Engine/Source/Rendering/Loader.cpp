@@ -4,19 +4,33 @@
 #include <vulkan/vulkan.h>
 #include <fstream>
 #include <filesystem>
+#include <ranges>
 #include <vk_mem_alloc.h>
 #include "Logger.h"
 #include "Rendering/Vulkan/VulkanCore.h"
 
-std::unordered_map<std::string, Model> Loader::loadedModels;	
-
-void Loader::LoadGLB(const std::string& fileName)
+void Loader::LoadAllAssets()
 {
-	if (loadedModels.contains(fileName))
+	// First load all of the 3d model files into memory
+	for (int i = 0; i < m_loadedModels.size(); ++i)
 	{
-		Logger::Warn("Model already loaded: ", fileName);
-		return;
+		const std::string& fileName = std::ranges::begin(m_loadedModels)->first;
+		Model& model = std::ranges::begin(m_loadedModels)->second;
+		LoadGLB(fileName, model);
 	}
+
+	// Then create the global vertex and index buffers for all of the loaded models
+	CreateVertexBuffer();
+	CreateIndexBuffer();
+}
+
+void Loader::LoadGLB(const std::string& fileName, Model& model)
+{
+	//if (m_loadedModels.contains(fileName))
+	//{
+	//	Logger::Warn("Model already loaded: ", fileName);
+	//	return;
+	//}
 
 	Logger::Info("Loading GLB file: ", fileName);
 
@@ -48,13 +62,13 @@ void Loader::LoadGLB(const std::string& fileName)
 	// Parse the GLB data using TinyGLTF3
 	tg3_parse_options opts;
 	tg3_error_stack errors;
-	tg3_model model;
+	tg3_model gltfModel;
 
 	tg3_parse_options_init(&opts);
 	tg3_error_stack_init(&errors);
 
 	tg3_error_code err = tg3_parse_glb(
-		&model,
+		&gltfModel,
 		&errors,
 		data.data(),
 		data.size(),
@@ -69,19 +83,17 @@ void Loader::LoadGLB(const std::string& fileName)
 		return;
 	}
 
-	// Load vertex and index data from the model
-	Model loadedModel;
 
-	Logger::Info("Model has ", model.meshes_count, " meshes.");
-	for (uint32_t i = 0; i < model.meshes_count; ++i)
+	Logger::Info("Model has ", gltfModel.meshes_count, " meshes.");
+	for (uint32_t i = 0; i < gltfModel.meshes_count; ++i)
 	{
-		Logger::Info("Processing mesh ", i, ": ", model.meshes[i].name.data);
-		const tg3_mesh& mesh = model.meshes[i];
-		for (uint32_t j = 0; j < mesh.primitives_count; ++j)
+		Logger::Info("Processing mesh ", i, ": ", gltfModel.meshes[i].name.data);
+		const tg3_mesh& gltfMesh = gltfModel.meshes[i];
+		for (uint32_t j = 0; j < gltfMesh.primitives_count; ++j)
 		{
 
 			Logger::Info("Processing primitive ", j, " of mesh ", i);
-			const tg3_primitive& primitive = mesh.primitives[j];
+			const tg3_primitive& primitive = gltfMesh.primitives[j];
 
 			// List all attributes of the primitive
 			Logger::Info("Primitive ", j, " has ", primitive.attributes_count, " attributes.");
@@ -91,26 +103,18 @@ void Loader::LoadGLB(const std::string& fileName)
 				Logger::Info("  Attribute ", k, ": Name: ", attribute.key.data, ", Accessor Index: ", attribute.value);
 			}
 			
-			Mesh loadedMesh;
+			Mesh mesh;
+			GetVertexData(gltfModel, primitive, mesh);
+			GetIndexData(gltfModel, primitive.indices, mesh);
 
-			GetVertexData(model, primitive, loadedMesh.vertices);
-			GetIndexData(model, primitive.indices, loadedMesh.indices);
-
-			CreateVertexBuffer(loadedMesh);
-			CreateIndexBuffer(loadedMesh);
-
-			Logger::Warn("Vertex Address: ", loadedMesh.vertexBuffer);
-			Logger::Warn("Index Address: ", loadedMesh.indexBuffer);
-
-			loadedModel.meshes.push_back(loadedMesh);
+			model.meshes.push_back(mesh);
 		}
 	}
 
-	loadedModels[fileName] = loadedModel;
 	Logger::Success("Loaded GLB file: ", fileName);
 }
 
-void Loader::GetVertexData(const tg3_model& model, const tg3_primitive& primitive, std::vector<Vertex>& vertices)
+void Loader::GetVertexData(const tg3_model& model, const tg3_primitive& primitive, Mesh& mesh)
 {
 	int positionAccessorIndex = GetAccessorIndex(primitive, "POSITION");
 	int normalAccessorIndex = GetAccessorIndex(primitive, "NORMAL");
@@ -152,11 +156,13 @@ void Loader::GetVertexData(const tg3_model& model, const tg3_primitive& primitiv
 
 		// Initialize normal and uv to sensible defaults to avoid uninitialized memory
 		Vertex vert{ position, normal, uv };
-		vertices.push_back(vert);
+		mesh.vertices.push_back(vert);
 	}
+
+	mesh.vertexCount = static_cast<uint32_t>(mesh.vertices.size());
 }
 
-void Loader::GetIndexData(const tg3_model& model, const uint32_t accessorIndex, std::vector<uint32_t>& indices)
+void Loader::GetIndexData(const tg3_model& model, const uint32_t accessorIndex, Mesh& mesh)
 {
 	// Load vertex positions from the first accessor of the first primitive
 	const tg3_accessor& accessor = model.accessors[accessorIndex];
@@ -165,7 +171,7 @@ void Loader::GetIndexData(const tg3_model& model, const uint32_t accessorIndex, 
 
 	const uint8_t* data = buffer.data.data + bufferView.byte_offset + accessor.byte_offset;
 
-	indices.resize(accessor.count);
+	mesh.indices.resize(accessor.count);
 
 	Logger::Info("Index type: ", accessor.component_type);
 	switch (accessor.component_type)
@@ -175,7 +181,7 @@ void Loader::GetIndexData(const tg3_model& model, const uint32_t accessorIndex, 
 			const uint8_t* src = reinterpret_cast<const uint8_t*>(data);
 
 			for (uint32_t i = 0; i < accessor.count; i++)
-				indices[i] = src[i];
+				mesh.indices[i] = src[i];
 
 			break;
 		}
@@ -185,7 +191,7 @@ void Loader::GetIndexData(const tg3_model& model, const uint32_t accessorIndex, 
 			const uint16_t* src = reinterpret_cast<const uint16_t*>(data);
 
 			for (uint32_t i = 0; i < accessor.count; i++)
-				indices[i] = src[i];
+				mesh.indices[i] = src[i];
 
 			break;
 		}
@@ -195,7 +201,7 @@ void Loader::GetIndexData(const tg3_model& model, const uint32_t accessorIndex, 
 			const uint32_t* src = reinterpret_cast<const uint32_t*>(data);
 
 			for (uint32_t i = 0; i < accessor.count; i++)
-				indices[i] = src[i];
+				mesh.indices[i] = src[i];
 
 			break;
 		}
@@ -203,14 +209,27 @@ void Loader::GetIndexData(const tg3_model& model, const uint32_t accessorIndex, 
 		default:
 		{
 			Logger::Error("Unsupported index component type.");
-			indices.clear();
+			mesh.indices.clear();
 			break;
 		}
 	}
+
+	mesh.indexCount = static_cast<uint32_t>(mesh.indices.size());
 }
 
-void Loader::CreateVertexBuffer(Mesh& mesh) {
-	const VkDeviceSize vertexBufferSize{ sizeof(Vertex) * mesh.vertices.size() };
+void Loader::CreateVertexBuffer() {
+	std::vector<Vertex> vertices;
+	
+	for (auto& val : m_loadedModels | std::views::values)
+	{
+		for (auto& mesh : val.meshes)
+		{
+			vertices.insert(vertices.end(), mesh.vertices.begin(), mesh.vertices.end());
+			mesh.vertexOffset = static_cast<uint32_t>(vertices.size()) - mesh.vertexCount; // Set the vertex offset for this mesh
+		}
+	}
+	
+	const VkDeviceSize vertexBufferSize{ sizeof(Vertex) * vertices.size() };
 	VkBufferCreateInfo bufferCreateInfo {};
 	bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	bufferCreateInfo.size = vertexBufferSize;
@@ -221,7 +240,7 @@ void Loader::CreateVertexBuffer(Mesh& mesh) {
 	bufferAllocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
 	VmaAllocationInfo vertexBufferAllocationInfo{};
-	if (vmaCreateBuffer(VulkanCore::GetAllocator(), &bufferCreateInfo, &bufferAllocationCreateInfo, &mesh.vertexBuffer, &mesh.vertexBufferAllocation, &vertexBufferAllocationInfo) != VK_SUCCESS)
+	if (vmaCreateBuffer(VulkanCore::GetAllocator(), &bufferCreateInfo, &bufferAllocationCreateInfo, &m_vertexBuffer, &m_vertexBufferAllocation, &vertexBufferAllocationInfo) != VK_SUCCESS)
 	{
 		Logger::Error("Failed to create vertex buffer for primitive");
 		return;
@@ -229,23 +248,34 @@ void Loader::CreateVertexBuffer(Mesh& mesh) {
 	
 	// Copy vertex data into the mapped allocation
 	if (vertexBufferSize > 0) {
-		memcpy(vertexBufferAllocationInfo.pMappedData, mesh.vertices.data(), vertexBufferSize);
+		memcpy(vertexBufferAllocationInfo.pMappedData, vertices.data(), vertexBufferSize);
 	}
 
 	// Flush to make non-coherent memory visible to the GPU
-	vmaFlushAllocation(VulkanCore::GetAllocator(), mesh.vertexBufferAllocation, 0, vertexBufferSize);
+	vmaFlushAllocation(VulkanCore::GetAllocator(), m_vertexBufferAllocation, 0, vertexBufferSize);
 
 	// Get address of gpu buffer
 	VkBufferDeviceAddressInfo addressInfo{};
 	addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-	addressInfo.buffer = mesh.vertexBuffer;
+	addressInfo.buffer = m_vertexBuffer;
 
-	mesh.pushConstants.vertexBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
-	mesh.vertexCount = static_cast<uint32_t>(mesh.vertices.size());
+	m_pushConstants.vertexBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
 }
 
-void Loader::CreateIndexBuffer(Mesh& mesh) {
-	const VkDeviceSize indexBufferSize{ sizeof(uint32_t) * mesh.indices.size() };
+void Loader::CreateIndexBuffer() {
+	std::vector<uint32_t> indices;
+	
+	// Loop through all models and meshes and accumulate all indices
+	for (auto& val : m_loadedModels | std::views::values)
+	{
+		for (auto& mesh : val.meshes)
+		{
+			indices.insert(indices.end(), mesh.indices.begin(), mesh.indices.end());
+			mesh.indexOffset = static_cast<uint32_t>(indices.size()) - mesh.indexCount; // Set the index offset for this mesh
+		}
+	}
+	
+	const VkDeviceSize indexBufferSize{ sizeof(uint32_t) * indices.size() };
 	VkBufferCreateInfo bufferCreateInfo {};
 	bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	bufferCreateInfo.size = indexBufferSize;
@@ -256,27 +286,26 @@ void Loader::CreateIndexBuffer(Mesh& mesh) {
 	bufferAllocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
 	VmaAllocationInfo indexBufferAllocationInfo{};
-	if (vmaCreateBuffer(VulkanCore::GetAllocator(), &bufferCreateInfo, &bufferAllocationCreateInfo, &mesh.indexBuffer, &mesh.indexBufferAllocation, &indexBufferAllocationInfo) != VK_SUCCESS)
+	if (vmaCreateBuffer(VulkanCore::GetAllocator(), &bufferCreateInfo, &bufferAllocationCreateInfo, &m_indexBuffer, &m_indexBufferAllocation, &indexBufferAllocationInfo) != VK_SUCCESS)
 	{
-		Logger::Error("Failed to create vertex buffer for primitive");
+		Logger::Error("Failed to create index buffer for primitive");
 		return;
 	}
 	
 	// Copy index data into the mapped allocation
 	if (indexBufferSize > 0) {
-		memcpy(indexBufferAllocationInfo.pMappedData, mesh.indices.data(), indexBufferSize);
+		memcpy(indexBufferAllocationInfo.pMappedData, indices.data(), indexBufferSize);
 	}
 
 	// Flush to make non-coherent memory visible to the GPU
-	vmaFlushAllocation(VulkanCore::GetAllocator(), mesh.indexBufferAllocation, 0, indexBufferSize);
+	vmaFlushAllocation(VulkanCore::GetAllocator(), m_indexBufferAllocation, 0, indexBufferSize);
 
 	// Get address of gpu buffer
 	VkBufferDeviceAddressInfo addressInfo{};
 	addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-	addressInfo.buffer = mesh.indexBuffer;
+	addressInfo.buffer = m_indexBuffer;
 
-	mesh.pushConstants.indexBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
-	mesh.indexCount = static_cast<uint32_t>(mesh.indices.size());
+	m_pushConstants.indexBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
 }
 
 int Loader::GetAccessorIndex(const tg3_primitive &primitive, const char* accessorName)

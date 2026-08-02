@@ -158,16 +158,18 @@ void VulkanCore::Render()
 	
 	std::unordered_map<std::string, Model> models = Loader::GetLoadedModels();
 	Model& model = models["Resources/Models/Cascadia.glb"];
-	Mesh& mesh = model.meshes[0];
+
 	Pipeline& pipeline = PipelineManager::GetPipeline("Resources/Shaders/shader2.slang");
 	
 	glm::mat4 view = glm::lookAt(glm::vec3(0, 0, 0), glm::vec3(0, 0, -1), glm::vec3(0, 1, 0));
 	glm::mat4 projection = glm::perspectiveFov(glm::radians(45.0f), static_cast<float>(window->GetWidth()), static_cast<float>(window->GetHeight()), 0.1f, 100.0f);
-	mesh.pushConstants.viewProjection = projection * view;
-	mesh.pushConstants.model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, -3.0f));
-	mesh.pushConstants.model = glm::rotate(mesh.pushConstants.model, glm::radians(static_cast<float>(Application::GetElapsedTime()) * 100.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+	PushConstants& pushConstants = Loader::GetPushConstants();
+	pushConstants.viewProjection = projection * view;
+	pushConstants.model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, -3.0f));
+	pushConstants.model = glm::rotate(pushConstants.model, glm::radians(static_cast<float>(Application::GetElapsedTime()) * 100.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 	
-	vkCmdPushConstants(frameResource.commandBuffer, pipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), &mesh.pushConstants);
+	vkCmdPushConstants(frameResource.commandBuffer, pipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), &pushConstants);
 	
 	vkCmdBeginRendering(frameResource.commandBuffer, &renderingInfo);
 
@@ -189,7 +191,16 @@ void VulkanCore::Render()
 	vkCmdSetScissor(frameResource.commandBuffer, 0, 1, &scissor);
 
 	vkCmdBindPipeline(frameResource.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline);
-	vkCmdDraw(frameResource.commandBuffer, mesh.indexCount, 1, 0, 0);
+
+
+	for (const Mesh& mesh : model.meshes)
+	{
+		pushConstants.vertexOffset = mesh.vertexOffset;
+		pushConstants.indexOffset = mesh.indexOffset;
+		vkCmdPushConstants(frameResource.commandBuffer, pipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), &pushConstants);
+		vkCmdDraw(frameResource.commandBuffer, mesh.indexCount, 1, 0, 0);
+	}
+	//vkCmdDraw(frameResource.commandBuffer, mesh.indexCount, 1, 0, 0);
 
 	vkCmdEndRendering(frameResource.commandBuffer);
 
