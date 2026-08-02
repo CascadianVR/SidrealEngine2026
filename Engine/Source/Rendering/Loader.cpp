@@ -37,6 +37,7 @@ void Loader::LoadScene(const std::string& fileName)
 	// Get the "sceneData" object and get each entry
 	const json& sceneData = data["sceneData"];
 
+	glm::mat4 modelMatrix;
 	for (const json& sceneObject : sceneData)
 	{
 		if (!sceneObject.is_object())
@@ -45,6 +46,7 @@ void Loader::LoadScene(const std::string& fileName)
 			continue;
 		}
 
+		// Model path
 		if (!sceneObject.contains("path") || !sceneObject["path"].is_string())
 		{
 			Logger::Warn("Skipping scene object without valid \"path\" field: ", sceneObject.dump());
@@ -52,6 +54,7 @@ void Loader::LoadScene(const std::string& fileName)
 		}
 		const std::string modelPath = sceneObject["path"].get<std::string>();	
 		
+		// Model position
 		if (!sceneObject.contains("position") || !sceneObject["position"].is_array() || sceneObject["position"].size() != 3)
 		{
 			Logger::Warn("Skipping scene object without valid \"position\" field: ", sceneObject.dump());
@@ -60,8 +63,30 @@ void Loader::LoadScene(const std::string& fileName)
 		const json& position = sceneObject["position"];
 		glm::vec3 modelPosition = { position[0].get<float>(),position[1].get<float>(),position[2].get<float>() };
 
+		// Model rotation
+		if (!sceneObject.contains("rotation") || !sceneObject["rotation"].is_array() || sceneObject["rotation"].size() != 3)
+		{
+			Logger::Warn("Skipping scene object without valid \"rotation\" field: ", sceneObject.dump());
+			continue;
+		}
+		const json& rotation = sceneObject["rotation"];
+		glm::vec3 modelRotation = { rotation[0].get<float>(),rotation[1].get<float>(),rotation[2].get<float>() };
+		
+		// Model scale
+		if (!sceneObject.contains("scale") || !sceneObject["scale"].is_array() || sceneObject["scale"].size() != 3)
+		{
+			Logger::Warn("Skipping scene object without valid \"scale\" field: ", sceneObject.dump());
+			continue;
+		}
+		const json& scale = sceneObject["scale"];
+		glm::vec3 modelScale = { scale[0].get<float>(),scale[1].get<float>(),scale[2].get<float>() };
+		
 		// Construct model matrix
-		const glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), modelPosition);
+		modelMatrix = glm::translate(glm::mat4(1.0f), modelPosition);
+		modelMatrix = glm::rotate(modelMatrix, glm::radians(modelRotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+		modelMatrix = glm::rotate(modelMatrix, glm::radians(modelRotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+		modelMatrix = glm::rotate(modelMatrix, glm::radians(modelRotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+		modelMatrix = glm::scale(modelMatrix, modelScale);
 		
 		Logger::Info("Loading model: ", modelPath);
 		Model model = { .modelMatrix = modelMatrix };
