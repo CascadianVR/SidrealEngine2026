@@ -3,14 +3,15 @@
 Sidreal Engine 2026 is a small rendering engine project intended for learning modern Vulkan rendering and C++ game engine concepts. It is an educational codebase and playground for experimenting with pipelines, resource management, model loading, and other rendering systems.
 
 ## Features
-- **Vertex/Index Buffer Pulling** | Efficient GPU-driven buffer management for fast vertex and index data access
-- **Automatic Model Instancing** | Zero-setup instancing pipeline for rendering repeated geometry with minimal draw calls
-- **Slang Shader Compilation** | Live-compiles Slang shaders directly to SPIR-V at load time
-- **JSON Scene Composition** | Declarative scene files with transform data (position, rotation, scale) for easy level design
-- **GLTF 3.0 Model Loading** | Uses tinyGLTF v3 for loading modern glTF assets
-- **Modern Vulkan API**
-  - **Dynamic Rendering** | Vulkan 1.3 dynamic rendering with no legacy render pass objects
-  - **Timeline Semaphores** | Clean GPU synchronization for frame-in-flight management
+- GPU-driven vertex/index buffer pulling
+- Automatic model instancing
+- Slang shader compilation to SPIR-V
+- JSON scene composition with transforms
+- GLTF 3.0 model loading via tinyGLTF v3
+- **Modern Vulkan**
+  - Dynamic rendering (no render passes)
+  - Timeline semaphores for frame synchronization
+  - Buffer device addresses for GPU-driven rendering
 
 ## Building
 ### Requirements
