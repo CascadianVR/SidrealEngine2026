@@ -15,8 +15,9 @@ Sidreal Engine 2026 is a small rendering engine project intended for learning mo
 3. Build the project and run through VS or the App executable.
 
 ## Included Third-party libraries/tools
-- tinyGLTF
-- GLM
-- GLFW
-- Vulkan Memory Allocator (VMA)
-- Premake
+- [tinyGLTF](https://github.com/syoyo/tinygltf)
+- [GLM](https://github.com/g-truc/glm)
+- [SDL2](https://github.com/libsdl-org/SDL)
+- [Vulkan Memory Allocator](https://gpuopen.com/vulkan-memory-allocator/)
+- [Premake](https://premake.github.io/)
+- [JSON for Modern C++](https://github.com/nlohmann/json)
