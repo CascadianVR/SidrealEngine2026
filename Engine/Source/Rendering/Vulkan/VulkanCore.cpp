@@ -157,7 +157,7 @@ void VulkanCore::Render()
 	};
 	
 	std::unordered_map<std::string, Model> models = Loader::GetLoadedModels();
-	Model& model = models["Resources/Models/Cascadia.glb"];
+	Model& model = models["Resources\\Models\\Cascadia.glb"];
 
 	Pipeline& pipeline = PipelineManager::GetPipeline("Resources/Shaders/shader2.slang");
 	
@@ -166,7 +166,7 @@ void VulkanCore::Render()
 
 	PushConstants& pushConstants = Loader::GetPushConstants();
 	pushConstants.viewProjection = projection * view;
-	pushConstants.model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, -3.0f));
+	pushConstants.model = model.modelMatrix;
 	pushConstants.model = glm::rotate(pushConstants.model, glm::radians(static_cast<float>(Application::GetElapsedTime()) * 100.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 	
 	vkCmdPushConstants(frameResource.commandBuffer, pipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), &pushConstants);

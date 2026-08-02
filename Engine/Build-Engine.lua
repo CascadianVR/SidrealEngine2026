@@ -15,6 +15,7 @@ project "Engine"
     includedirs
     {
         "Source",
+        "../Dependencies",
         "../Dependencies/glfw/include",
         "../Dependencies/SDL2/include",
         "../Dependencies/glm",

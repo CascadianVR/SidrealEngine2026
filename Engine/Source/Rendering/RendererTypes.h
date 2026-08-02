@@ -34,12 +34,7 @@ struct Mesh {
 
 struct Model {
 	std::vector<Mesh> meshes = std::vector<Mesh>();
-};
-
-// Per-instance data
-struct ModelInstance {
-	std::shared_ptr<Model> model;
-	glm::mat4 transform;
+	glm::mat4 modelMatrix;
 };
 
 struct Pipeline {

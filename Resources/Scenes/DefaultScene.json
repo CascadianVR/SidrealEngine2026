@@ -1,0 +1,13 @@
+{
+  "sceneName": "Test Scene",
+  "version": "0.0.1",
+  "sceneData": [
+    {
+      "name": "Cascadia",
+      "path": "Resources\\Models\\Cascadia.glb",
+      "position": [ 0.0, -1.0, -3.0 ],
+      "rotation": [ 0.0, 0.0, 0.0 ],
+      "scale":    [ 0.0, 0.0, 0.0 ]
+    }
+  ]
+}

@@ -9,7 +9,7 @@ void Application::Initialize()
 	m_window->Show();
 	VulkanCore::Initialize(m_window.get());
 
-	Loader::LoadAllAssets();
+	Loader::LoadScene("Resources/Scenes/DefaultScene.json");
 }
 
 void Application::Update()

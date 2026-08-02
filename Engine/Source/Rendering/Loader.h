@@ -8,17 +8,18 @@
 
 class Loader {
 public:
-	static void LoadAllAssets();
+	static void LoadScene(const std::string& fileName);
 	static std::unordered_map<std::string, Model>& GetLoadedModels() { return m_loadedModels; }
 	static PushConstants& GetPushConstants() { return m_pushConstants; }
 private:
+	static void LoadAllAssets();
 	static void LoadGLB(const std::string& fileName, Model& model);
 	static void GetVertexData(const tg3_model& model, const tg3_primitive& primitive, Mesh& mesh);
 	static void GetIndexData(const tg3_model& model, uint32_t accessorIndex, Mesh& mesh);
 	static void CreateVertexBuffer();
 	static void CreateIndexBuffer();
 	static int GetAccessorIndex(const tg3_primitive &primitive, const char* accessorName);
-	static inline std::unordered_map<std::string, Model> m_loadedModels = { { "Resources/Models/Cascadia.glb", Model() } };
+	static inline std::unordered_map<std::string, Model> m_loadedModels;
 	
 	// Vulkan Stuffs
 	static inline VkBuffer m_vertexBuffer = VK_NULL_HANDLE;

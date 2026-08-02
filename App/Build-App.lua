@@ -14,6 +14,7 @@ project "App"
     {
         "Source",
         "../Engine/Source",
+        "../Dependencies",
         "../Dependencies/glfw/include",
         "../Dependencies/sdl2/include",
         "../Dependencies/glm",

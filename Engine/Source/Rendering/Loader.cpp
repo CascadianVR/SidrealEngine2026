@@ -6,17 +6,77 @@
 #include <filesystem>
 #include <ranges>
 #include <vk_mem_alloc.h>
-#include "Logger.h"
+#include <glm/ext/matrix_transform.hpp>
+
 #include "Rendering/Vulkan/VulkanCore.h"
+#include "Logger.h"
+#include "json.hpp"
+
+using json = nlohmann::json;
+
+void Loader::LoadScene(const std::string& fileName)
+{
+	// Load json scene file
+	std::ifstream file(fileName);
+	if (!file)
+	{
+		Logger::Error("Failed to open file: ", fileName);
+		return;
+	}
+
+	json data = json::parse(file);
+	
+	Logger::Info(data.dump(2));
+	
+	if (!data.contains("sceneData") || !data["sceneData"].is_array())
+	{
+		Logger::Error("Scene file is missing a valid \"sceneData\" array.");
+		return;
+	}
+	
+	// Get the "sceneData" object and get each entry
+	const json& sceneData = data["sceneData"];
+
+	for (const json& sceneObject : sceneData)
+	{
+		if (!sceneObject.is_object())
+		{
+			Logger::Warn("Skipping non-object sceneData entry: ", sceneObject.dump());
+			continue;
+		}
+
+		if (!sceneObject.contains("path") || !sceneObject["path"].is_string())
+		{
+			Logger::Warn("Skipping scene object without valid \"path\" field: ", sceneObject.dump());
+			continue;
+		}
+		const std::string modelPath = sceneObject["path"].get<std::string>();	
+		
+		if (!sceneObject.contains("position") || !sceneObject["position"].is_array() || sceneObject["position"].size() != 3)
+		{
+			Logger::Warn("Skipping scene object without valid \"position\" field: ", sceneObject.dump());
+			continue;
+		}
+		const json& position = sceneObject["position"];
+		glm::vec3 modelPosition = { position[0].get<float>(),position[1].get<float>(),position[2].get<float>() };
+
+		// Construct model matrix
+		const glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), modelPosition);
+		
+		Logger::Info("Loading model: ", modelPath);
+		Model model = { .modelMatrix = modelMatrix };
+		m_loadedModels.try_emplace(modelPath, model);
+	}
+	
+	LoadAllAssets();
+}
 
 void Loader::LoadAllAssets()
 {
 	// First load all of the 3d model files into memory
-	for (int i = 0; i < m_loadedModels.size(); ++i)
-	{
-		const std::string& fileName = std::ranges::begin(m_loadedModels)->first;
-		Model& model = std::ranges::begin(m_loadedModels)->second;
-		LoadGLB(fileName, model);
+    for (auto& [name, model] : m_loadedModels) {
+		Logger::Info("Loading model: ", name);
+		LoadGLB(name, model);
 	}
 
 	// Then create the global vertex and index buffers for all of the loaded models
