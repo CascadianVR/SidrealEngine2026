@@ -8,7 +8,7 @@ Sidreal Engine 2026 is a small rendering engine project intended for learning mo
 - Slang shader compilation to SPIR-V
 - JSON scene composition with transforms
 - GLTF 3.0 model loading via tinyGLTF v3
-- **Modern Vulkan**
+- **Modern Vulkan API Usage**
   - Dynamic rendering (no render passes)
   - Timeline semaphores for frame synchronization
   - Buffer device addresses for GPU-driven rendering
