@@ -4,6 +4,8 @@
 #include <Logger.h>
 #include <ranges>
 #include <filesystem>
+
+#include "Rendering/Loader.h"
 namespace fs = std::filesystem;
 
 #include "Rendering/RendererTypes.h"
@@ -96,10 +98,36 @@ void PipelineManager::CreatePipeline(const std::string& fileName, VkFormat depth
 		Logger::Info(std::filesystem::current_path());
 		throw std::runtime_error("Shader file not found: " + fs::absolute(p).string());
 	}
+	Slang::ComPtr<ISlangBlob> diagnostics;
+	Slang::ComPtr slangModule{ slangSession->loadModuleFromSource("triangle", fileName.c_str(), nullptr, diagnostics.writeRef()) };
 
-	Slang::ComPtr<slang::IModule> slangModule{ slangSession->loadModuleFromSource("triangle", fileName.c_str(), nullptr, nullptr) };
+	if (slangModule == nullptr)
+	{
+		std::string msg;
+		if (diagnostics && diagnostics->getBufferSize() > 0)
+		{
+			msg = std::string(static_cast<const char*>(diagnostics->getBufferPointer()), diagnostics->getBufferSize());		}
+		else
+		{
+			msg = "No diagnostic output available.";
+		}
+		Logger::Error("Slang compilation failed for ", fileName, ":\n", msg);
+		throw std::runtime_error("Slang compilation failed for " + fileName + ":\n" + msg);
+	}
+
 	Slang::ComPtr<ISlangBlob> spirv;
-	slangModule->getTargetCode(0, spirv.writeRef());
+	Slang::Result spirvResult = slangModule->getTargetCode(0, spirv.writeRef());
+
+	if (!SLANG_SUCCEEDED(spirvResult) || spirv == nullptr)
+	{
+		std::string msg;
+		if (diagnostics && diagnostics->getBufferSize() > 0)
+		{
+			msg = std::string(static_cast<const char*>(diagnostics->getBufferPointer()), diagnostics->getBufferSize());
+		}
+		Logger::Error("SPIR-V generation failed for ", fileName, ":\n", msg);
+		throw std::runtime_error("SPIR-V generation failed for " + fileName + ":\n" + msg);
+	}
 
 	// Create shader module from SPIR-V code
 	VkShaderModuleCreateInfo shaderModuleCreateInfo{ };
@@ -130,9 +158,10 @@ void PipelineManager::CreatePipeline(const std::string& fileName, VkFormat depth
 	// Create pipeline layout for the graphics pipeline
 	VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {};
 	pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutCreateInfo.setLayoutCount = 0;
+	pipelineLayoutCreateInfo.setLayoutCount = 1;
 	pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
 	pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
+	pipelineLayoutCreateInfo.pSetLayouts = Loader::GetDescriptorSetLayout();
 	
 	VkPipelineLayout pipelineLayout;
 	if (vkCreatePipelineLayout(m_device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {

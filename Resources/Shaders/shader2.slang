@@ -31,6 +31,18 @@ struct PushConstants {
 [[vk::push_constant]]
 PushConstants gPushConstants;
 
+[[vk::binding(0, 0)]]
+StructuredBuffer<Vertex> g_Vertices;
+
+[[vk::binding(1, 0)]]
+StructuredBuffer<uint32_t> g_Indices;
+
+[[vk::binding(2, 0)]]
+StructuredBuffer<InstanceData> g_Instances;
+
+[[vk::binding(3, 0)]]
+StructuredBuffer<RenderData> g_RenderDatas;
+
 struct VSOutput
 {
     float4 position : SV_POSITION;
@@ -44,18 +56,26 @@ VSOutput main(uint32_t vertexID: SV_VertexID, uint32_t instanceID: SV_InstanceID
 {
     VSOutput output;
 
+    RenderData renderData = g_RenderDatas[firstInstance];
+    InstanceData instance = g_Instances[renderData.instanceOffset + instanceID];
+
+    uint32_t index = g_Indices[renderData.indexOffset + vertexID];
+    Vertex v = g_Vertices[renderData.vertexOffset + index];
+
+
+
     // Get buffers from push constants
-    Vertex* vertices = (Vertex *)gPushConstants.vertexBuffer;
-    uint32_t* indices = (uint32_t*)gPushConstants.indexBuffer;
-    RenderData* renderDataBuffer = (RenderData*)gPushConstants.renderDataBuffer;
-    InstanceData* instanceBuffer = (InstanceData*)gPushConstants.instanceDataBuffer;
-
-    RenderData renderData = renderDataBuffer[firstInstance];
-    InstanceData instance = instanceBuffer[renderData.instanceOffset + instanceID];
-
-    // Get vertex by calculating the index from the index buffer
-    uint32_t index = indices[renderData.indexOffset + vertexID];
-    Vertex v = vertices[renderData.vertexOffset + index];
+    //Vertex* vertices = (Vertex *)gPushConstants.vertexBuffer;
+    //uint32_t* indices = (uint32_t*)gPushConstants.indexBuffer;
+    //RenderData* renderDataBuffer = (RenderData*)gPushConstants.renderDataBuffer;
+    //InstanceData* instanceBuffer = (InstanceData*)gPushConstants.instanceDataBuffer;
+    //
+    //RenderData renderData = renderDataBuffer[firstInstance];
+    //InstanceData instance = instanceBuffer[renderData.instanceOffset + instanceID];
+    //
+    //// Get vertex by calculating the index from the index buffer
+    //uint32_t index = indices[renderData.indexOffset + vertexID];
+    //Vertex v = vertices[renderData.vertexOffset + index];
 
     // Object space -> world space
     float4 worldPosition = mul(instance.modelMatrix, float4(v.position.xyz, 1.0));
@@ -73,7 +93,10 @@ VSOutput main(uint32_t vertexID: SV_VertexID, uint32_t instanceID: SV_InstanceID
 [shader("fragment")]
 float4 main(VSOutput input) : SV_TARGET
 {
-    float3 lightDir = float3(0.5f, -0.5f, 0.5f);
     float3 normal = normalize(input.normal);
-    return float4(normal * 0.5 + 0.5, 1.0);
+    float3 lightDir = float3(0.5f, 0.5f, 0.5f);
+
+    float NdotL = max(dot(normal, normalize(lightDir)) * 0.5f + 0.5f, 0.0);
+
+    return float4((normal * 0.5 + 0.5) * NdotL.xxx, 1.0);
 }

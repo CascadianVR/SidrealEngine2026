@@ -28,6 +28,8 @@ LogicalDevice::LogicalDevice(PhysicalDevice& physicalDevice)
 	features12.bufferDeviceAddress = VK_TRUE;
 	features12.runtimeDescriptorArray = VK_TRUE;
 	features12.descriptorBindingVariableDescriptorCount = VK_TRUE;
+	features12.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+	features12.descriptorBindingPartiallyBound = VK_TRUE;
 	features12.timelineSemaphore = VK_TRUE;
 	features12.scalarBlockLayout = VK_TRUE;
 	features12.pNext = &features11;

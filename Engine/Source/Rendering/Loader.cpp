@@ -129,8 +129,6 @@ void Loader::LoadScene(const std::string& fileName)
 			}
 		}
 	}
-	
-	CreateDataBuffers();
 }
 
 void Loader::CreateDataBuffers()
@@ -140,6 +138,7 @@ void Loader::CreateDataBuffers()
 	CreateIndexBuffer();
 	CreateInstanceDataBuffer();
 	CreateRenderDataBuffer();
+	CreateDescriptorSet();
 }
 
 void Loader::LoadGLB(const std::string& fileName, glm::mat4& modelMatrix)
@@ -555,6 +554,141 @@ void Loader::CreateInstanceDataBuffer() {
 	m_pushConstants.instanceDataBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
 	
 	Logger::Success("Created instance data buffer");
+}
+
+void Loader::CreateDescriptorSet()
+{
+	// Vertex buffer
+	m_bindings.push_back({
+		.binding = 0,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+	});
+
+	// Index buffer
+	m_bindings.push_back({
+		.binding = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+	});
+	
+	// Instance data buffer
+	m_bindings.push_back({
+		.binding = 2,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+	});
+	
+	// Render data buffer
+	m_bindings.push_back({
+		.binding = 3,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+	});
+	
+	// Bindless textures
+	m_bindings.push_back({
+		.binding = 4,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.descriptorCount = MAX_TEXTURES,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+	});
+	
+	m_bindingFlags[4] =
+	  VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
+	| VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
+	| VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT; // Lets us modify after bind
+	
+	VkDescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{};
+	flagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+	flagsInfo.bindingCount = static_cast<uint32_t>(m_bindingFlags.size());
+	flagsInfo.pBindingFlags = m_bindingFlags.data();
+	
+	VkDescriptorSetLayoutCreateInfo layoutInfo;
+	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layoutInfo.pNext = &flagsInfo;
+	layoutInfo.bindingCount = static_cast<uint32_t>(m_bindings.size());
+	layoutInfo.pBindings = m_bindings.data();
+	layoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT; // Lets us modify after bind
+	
+	if (vkCreateDescriptorSetLayout(VulkanCore::GetDevice(), &layoutInfo, nullptr, &m_descriptorSetLayout) != VK_SUCCESS)
+	{
+		Logger::Error("Failed to create descriptor set layout");
+		return;
+	}
+
+	constexpr VkDescriptorPoolSize poolSizes[] =
+	{
+		{
+			.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.descriptorCount = 4
+		},
+		{
+			.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.descriptorCount = MAX_TEXTURES
+		}
+	};
+	
+	VkDescriptorPoolCreateInfo poolInfo{};
+	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	poolInfo.poolSizeCount = std::size(poolSizes);
+	poolInfo.pPoolSizes = poolSizes;
+	poolInfo.maxSets = 1;
+	poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT; // Lets us modify after bind
+	
+	if (vkCreateDescriptorPool(VulkanCore::GetDevice(), &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS)
+	{
+		Logger::Error("Failed to create descriptor pool");	
+		return;
+	}
+
+	constexpr uint32_t textureCount = MAX_TEXTURES;
+	VkDescriptorSetVariableDescriptorCountAllocateInfo variableInfo{};
+	variableInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
+	variableInfo.descriptorSetCount = 1;
+	variableInfo.pDescriptorCounts = &textureCount;
+	
+	VkDescriptorSetAllocateInfo allocInfo{};
+	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	allocInfo.descriptorPool = m_descriptorPool;
+	allocInfo.descriptorSetCount = 1;
+	allocInfo.pSetLayouts = &m_descriptorSetLayout;
+	allocInfo.pNext = &variableInfo;
+	
+	if (vkAllocateDescriptorSets(VulkanCore::GetDevice(), &allocInfo, &m_descriptorSet) != VK_SUCCESS)
+	{
+		Logger::Error("Failed to allocate descriptor set");
+		return;
+	}
+	
+	VkDescriptorBufferInfo bufferInfos[4]{};
+	bufferInfos[0].buffer = m_vertexBuffer;
+	bufferInfos[0].range = VK_WHOLE_SIZE;
+	bufferInfos[1].buffer = m_indexBuffer;
+	bufferInfos[1].range = VK_WHOLE_SIZE;
+	bufferInfos[2].buffer = dataBuffer;
+	bufferInfos[2].range = VK_WHOLE_SIZE;
+	bufferInfos[3].buffer = m_renderDataBuffer;
+	bufferInfos[3].range = VK_WHOLE_SIZE;
+
+	VkWriteDescriptorSet writes[4]{};
+	for (int i = 0; i < 4; i++)
+	{
+		writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		writes[i].dstSet = m_descriptorSet;
+		writes[i].dstBinding = i;
+		writes[i].descriptorCount = 1;
+		writes[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		writes[i].pBufferInfo = &bufferInfos[i];
+	}
+
+	vkUpdateDescriptorSets(VulkanCore::GetDevice(), 4, writes, 0, nullptr);
+	
+	Logger::Success("Created descriptor set");
 }
 
 int Loader::GetAccessorIndex(const tg3_primitive &primitive, const char* accessorName)

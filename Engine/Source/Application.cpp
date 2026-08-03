@@ -10,11 +10,11 @@ void Application::Initialize()
 	
 	m_window = std::make_unique<Window>(1280, 720, "Vulkan Window");
 	m_window->Show();
+	Loader::LoadScene("Resources\\Scenes\\DefaultScene.json");
 	VulkanCore::Initialize(m_window.get());
 
 	Input::Initialize(m_window.get());
 	
-	Loader::LoadScene("Resources\\Scenes\\DefaultScene.json");
 }
 
 void Application::Update()

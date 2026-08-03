@@ -36,6 +36,7 @@ void VulkanCore::Initialize(const Window* window)
 	SetupDeviceQueueAndSemaphores();
 	CreateCommandBuffers();
 
+	Loader::CreateDataBuffers();
 	PipelineManager::Initialize(m_logicalDevice.GetLogicalDevice());
 	PipelineManager::CreatePipeline("Resources/Shaders/shader2.slang", m_swapChain.GetDepthFormat());
 }
@@ -195,6 +196,15 @@ void VulkanCore::Render()
 	glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
 	glm::mat4 projection = glm::perspectiveFov(glm::radians(45.0f), static_cast<float>(window->GetWidth()), static_cast<float>(window->GetHeight()), 0.1f, 100.0f);
 
+	// Bind descriptor sets
+	vkCmdBindDescriptorSets(
+		frameResource.commandBuffer,
+		VK_PIPELINE_BIND_POINT_GRAPHICS,
+		pipeline.pipelineLayout,
+		0, 1, Loader::GetDescriptorSet(),
+		0, nullptr
+	);
+	
 	// Push constants for camera
 	PushConstants& pushConstants = Loader::GetPushConstants();
 	pushConstants.viewProjection = projection * view;

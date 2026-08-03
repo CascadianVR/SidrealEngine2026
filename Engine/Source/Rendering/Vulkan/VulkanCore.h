@@ -18,6 +18,7 @@ public:
 	static VmaAllocator GetAllocator() { return m_allocator; }
 	static VkDevice GetDevice() { return m_logicalDevice.GetLogicalDevice(); }
 	static constexpr uint32_t MaxFramesInFlight = 2;
+	static constexpr int MAX_TEXTURES = 128;
 private:
 
 	static inline PhysicalDevice m_physicalDevice;
