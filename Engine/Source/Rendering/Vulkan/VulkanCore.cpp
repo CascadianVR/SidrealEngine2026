@@ -7,7 +7,7 @@
 #include "Window.h"
 #include "Logger.h"
 #include "glm/glm.hpp"
-#include "Rendering/GPUResourceUploader.h"
+#include "Rendering/Vulkan/GPUResourceUploader.h"
 #include "Application.h"
 #include "Rendering/Vulkan/PipelineManager.h"
 #include <glm/ext/matrix_clip_space.hpp>

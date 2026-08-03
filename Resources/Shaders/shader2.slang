@@ -56,26 +56,13 @@ VSOutput main(uint32_t vertexID: SV_VertexID, uint32_t instanceID: SV_InstanceID
 {
     VSOutput output;
 
+    // Get render and instance data from buffers
     RenderData renderData = g_RenderDatas[firstInstance];
     InstanceData instance = g_Instances[renderData.instanceOffset + instanceID];
 
+    // Get the vertex from the vertex buffer using the index buffer
     uint32_t index = g_Indices[renderData.indexOffset + vertexID];
     Vertex v = g_Vertices[renderData.vertexOffset + index];
-
-
-
-    // Get buffers from push constants
-    //Vertex* vertices = (Vertex *)gPushConstants.vertexBuffer;
-    //uint32_t* indices = (uint32_t*)gPushConstants.indexBuffer;
-    //RenderData* renderDataBuffer = (RenderData*)gPushConstants.renderDataBuffer;
-    //InstanceData* instanceBuffer = (InstanceData*)gPushConstants.instanceDataBuffer;
-    //
-    //RenderData renderData = renderDataBuffer[firstInstance];
-    //InstanceData instance = instanceBuffer[renderData.instanceOffset + instanceID];
-    //
-    //// Get vertex by calculating the index from the index buffer
-    //uint32_t index = indices[renderData.indexOffset + vertexID];
-    //Vertex v = vertices[renderData.vertexOffset + index];
 
     // Object space -> world space
     float4 worldPosition = mul(instance.modelMatrix, float4(v.position.xyz, 1.0));

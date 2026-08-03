@@ -4,11 +4,10 @@
 #include <Logger.h>
 #include <ranges>
 #include <filesystem>
-
-#include "Rendering/GPUResourceUploader.h"
 namespace fs = std::filesystem;
 
 #include "Rendering/RendererTypes.h"
+#include "Rendering/Vulkan/GPUResourceUploader.h"
 #include "Rendering/Vulkan/VulkanCore.h"
 
 void PipelineManager::Initialize(const VkDevice& device)

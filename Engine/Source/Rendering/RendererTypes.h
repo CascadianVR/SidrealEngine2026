@@ -13,6 +13,14 @@ struct Vertex {
     glm::vec4 uv;
 };
 
+struct Texture
+{
+	int32_t width;
+	int32_t height;
+	uint32_t channels; 
+	std::vector<uint8_t> pixels;
+};
+
 struct Mesh {
 	std::vector<Vertex> vertices = std::vector<Vertex>();
 	std::vector<uint32_t> indices = std::vector<uint32_t>();
@@ -20,6 +28,7 @@ struct Mesh {
 	uint32_t indexCount;
 	uint32_t vertexOffset;
 	uint32_t indexOffset;
+	uint32_t imageIndex;
 };
 
 struct Model {

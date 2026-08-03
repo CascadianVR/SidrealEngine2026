@@ -1,9 +1,7 @@
 #pragma once
 
-#include <string>
 #include <vector>
 #include <array>
-#include <unordered_map>
 #include <vulkan/vulkan.h>
 #include <vk_mem_alloc.h>
 #include "Rendering/RendererTypes.h"

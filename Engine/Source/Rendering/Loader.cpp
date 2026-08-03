@@ -1,3 +1,4 @@
+#define STB_IMAGE_IMPLEMENTATION
 #define TINYGLTF3_IMPLEMENTATION
 #include "Loader.h"
 
@@ -13,7 +14,7 @@ using json = nlohmann::json;
 std::vector<Model> Loader::LoadScene(const std::string& fileName)
 {
 	m_loadedModels.clear();
-	m_modelAssetLookup.clear();
+	m_modelLookup.clear();
 
 	// Load json scene file
 	std::ifstream file(fileName);
@@ -91,11 +92,11 @@ std::vector<Model> Loader::LoadScene(const std::string& fileName)
 		LoadGLB(modelPath, modelMatrix);
 	}
 
-	for (int i = 0; i < 10; i++)
+	for (int i = 0; i < 5; i++)
 	{
-		for (int j = 0; j < 10; j++)
+		for (int j = 0; j < 5; j++)
 		{
-			for (int k = 0; k < 10; k++)
+			for (int k = 0; k < 5; k++)
 			{
 				glm::vec3 position = { static_cast<float>(i) * 1.0f, static_cast<float>(j) * 1.7f, static_cast<float>(k) * -1.0f };
 				glm::vec3 rotation = { 0.0f, 0.0f, 0.0f };
@@ -110,11 +111,11 @@ std::vector<Model> Loader::LoadScene(const std::string& fileName)
 		}
 	}
 
-	for (int i = 0; i < 10; i++)
+	for (int i = 0; i < 5; i++)
 	{
-		for (int j = 0; j < 10; j++)
+		for (int j = 0; j < 5; j++)
 		{
-			for (int k = 0; k < 10; k++)
+			for (int k = 0; k < 5; k++)
 			{
 				glm::vec3 position = { -static_cast<float>(i) * 1.0f - 3.0f, static_cast<float>(j) * 1.7f, static_cast<float>(k) * -1.0f };
 				glm::vec3 rotation = { 0.0f, 0.0f, 0.0f };
@@ -134,11 +135,11 @@ std::vector<Model> Loader::LoadScene(const std::string& fileName)
 
 void Loader::LoadGLB(const std::string& fileName, glm::mat4& modelMatrix)
 {
-	if (m_modelAssetLookup.find(fileName) != m_modelAssetLookup.end())
+	if (m_modelLookup.find(fileName) != m_modelLookup.end())
 	{
 		//Logger::Warn("Model '", fileName, "' already loaded, adding instanced version.");
 		
-		Model& model = m_loadedModels[m_modelAssetLookup[fileName]];
+		Model& model = m_loadedModels[m_modelLookup[fileName]];
 		model.instanceCount += 1;
 		model.instanceMatrices.push_back(modelMatrix);
 		
@@ -179,7 +180,7 @@ void Loader::LoadGLB(const std::string& fileName, glm::mat4& modelMatrix)
 
 	tg3_parse_options_init(&opts);
 	tg3_error_stack_init(&errors);
-
+	
 	tg3_error_code err = tg3_parse_glb(
 		&gltfModel,
 		&errors,
@@ -195,9 +196,56 @@ void Loader::LoadGLB(const std::string& fileName, glm::mat4& modelMatrix)
 		Logger::Error("Failed to parse GLB file: ", fileName);
 		return;
 	}
+	
+	m_loadedTextures.resize(gltfModel.images_count);
+	for (uint32_t t = 0; t < gltfModel.images_count; t++)
+	{
+		const tg3_image& image = gltfModel.images[t];
+		Logger::Info("Loading texture: ", image.name.data);
 
+		if (image.buffer_view >= 0)
+		{
+			const tg3_buffer_view& bv = gltfModel.buffer_views[image.buffer_view];
+			const tg3_buffer& buf = gltfModel.buffers[bv.buffer];
 
+			const uint8_t* rawImage = buf.data.data + bv.byte_offset;
+			int w, h, channels;
+			stbi_uc* pixels = stbi_load_from_memory(
+				rawImage, static_cast<int>(bv.byte_length),
+				&w, &h, &channels, 4
+			);
+			if (pixels)
+			{
+				size_t size = static_cast<size_t>(w * h * 4);
+				
+				Texture texture;
+				texture.width = w;
+				texture.height = h;
+				texture.channels = channels;
+				texture.pixels.reserve(size);
+				texture.pixels.assign(pixels, pixels + size);
+				Logger::Info("  Decoded: ", w, "x", h, " RGBA (", size, " bytes)");
+				stbi_image_free(pixels);
+			}
+			else
+			{
+				Logger::Error("  Failed to decode image: ", stbi_failure_reason());
+			}
+		}
+		else if (image.uri.data && std::string(image.uri.data).starts_with("data:"))
+		{
+			Logger::Info("  Skipping data URI image (not yet supported)");
+		}
+		else
+		{
+			Logger::Error("  No image data found for image: ", image.name.data);
+		}
+	}
+	
+	
 	//Logger::Info("Model has ", gltfModel.meshes_count, " meshes.");
+	
+	// Load model data
 	Model model{};
 	for (uint32_t i = 0; i < gltfModel.meshes_count; ++i)
 	{
@@ -220,6 +268,7 @@ void Loader::LoadGLB(const std::string& fileName, glm::mat4& modelMatrix)
 			Mesh mesh;
 			GetVertexData(gltfModel, primitive, mesh);
 			GetIndexData(gltfModel, primitive.indices, mesh);
+			GetTextureData(gltfModel, primitive, mesh);
 
 			model.meshes.push_back(mesh);
 		}
@@ -228,9 +277,13 @@ void Loader::LoadGLB(const std::string& fileName, glm::mat4& modelMatrix)
 	model.name = fileName;
 	model.instanceMatrices[0] = modelMatrix;
 	m_loadedModels.push_back(model);
-	m_modelAssetLookup[fileName] = static_cast<uint32_t>(m_loadedModels.size() - 1);
+	m_modelLookup[fileName] = static_cast<uint32_t>(m_loadedModels.size() - 1);
 	
 	Logger::Success("Loaded GLB file: ", fileName);
+	
+	// Free model data
+	tg3_model_free(&gltfModel);
+	tg3_error_stack_free(&errors);
 }
 
 void Loader::GetVertexData(const tg3_model& model, const tg3_primitive& primitive, Mesh& mesh)
@@ -261,6 +314,9 @@ void Loader::GetVertexData(const tg3_model& model, const tg3_primitive& primitiv
 	const uint32_t uvStride = uvBufferView.byte_stride != 0 ? uvBufferView.byte_stride : static_cast<uint32_t>(sizeof(glm::vec2));
 
 	mesh.vertices.reserve(positionAccessor.count);
+	
+	m_loadedTextures.reserve(model.textures_count);
+
 	
 	// Assuming the accessor type is VEC3 and component type is FLOAT
 	for (uint32_t v = 0; v < positionAccessor.count; v++)
@@ -319,6 +375,29 @@ void Loader::GetIndexData(const tg3_model& model, const uint32_t accessorIndex, 
 	}
 
 	mesh.indexCount = static_cast<uint32_t>(mesh.indices.size());
+}
+
+void Loader::GetTextureData(const tg3_model& model, const tg3_primitive& primitive, Mesh& mesh)
+{
+	const uint32_t materialIndex = primitive.material;
+	if (materialIndex >= static_cast<uint32_t>(0) && materialIndex < model.materials_count) 
+	{
+		const tg3_material& material = model.materials[materialIndex];
+            
+		// Get the base color texture index from the material
+		const uint32_t textureIndex = material.pbr_metallic_roughness.base_color_texture.index;
+		
+		if (textureIndex >= static_cast<uint32_t>(0) && textureIndex < model.textures_count)
+		{
+			// Use texture index to get the source image index
+			const tg3_texture& gltfTexture = model.textures[textureIndex];
+			mesh.imageIndex = gltfTexture.source;
+		}
+	} 
+	else 
+	{
+		Logger::Info("Primitive uses default fallback material (no texture).");
+	}
 }
 
 int Loader::GetAccessorIndex(const tg3_primitive &primitive, const char* accessorName)
