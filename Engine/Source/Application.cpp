@@ -7,14 +7,15 @@
 void Application::Initialize()
 {
 	m_lastTime = std::chrono::system_clock::now();
-	
+
 	m_window = std::make_unique<Window>(1280, 720, "Vulkan Window");
 	m_window->Show();
-	Loader::LoadScene("Resources\\Scenes\\DefaultScene.json");
-	VulkanCore::Initialize(m_window.get());
+
+	auto models = Loader::LoadScene("Resources\\Scenes\\DefaultScene.json");
+	VulkanCore::Initialize(m_window.get(), models);
 
 	Input::Initialize(m_window.get());
-	
+
 }
 
 void Application::Update()

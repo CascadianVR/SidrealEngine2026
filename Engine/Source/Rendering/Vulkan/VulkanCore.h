@@ -13,7 +13,7 @@ class Window;
 
 class VulkanCore {
 public:
-	static void Initialize(const Window* window);
+	static void Initialize(const Window* window, const std::vector<Model>& models);
 	static void Render();
 	static VmaAllocator GetAllocator() { return m_allocator; }
 	static VkDevice GetDevice() { return m_logicalDevice.GetLogicalDevice(); }

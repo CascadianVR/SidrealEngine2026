@@ -7,7 +7,7 @@
 #include "Window.h"
 #include "Logger.h"
 #include "glm/glm.hpp"
-#include "Rendering/Loader.h"
+#include "Rendering/GPUResourceUploader.h"
 #include "Application.h"
 #include "Rendering/Vulkan/PipelineManager.h"
 #include <glm/ext/matrix_clip_space.hpp>
@@ -19,12 +19,11 @@
 float yaw = -90.0f;
 float pitch = 0.0f;
 	
-// 1. Setup initial camera vectors
 glm::vec3 cameraPos   = glm::vec3(0.0f, 1.0f, 0.0f);
 glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
 glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
 
-void VulkanCore::Initialize(const Window* window)
+void VulkanCore::Initialize(const Window* window, const std::vector<Model>& models)
 {
 	CreateInstance();
 	CreateDebugCallback();
@@ -36,7 +35,7 @@ void VulkanCore::Initialize(const Window* window)
 	SetupDeviceQueueAndSemaphores();
 	CreateCommandBuffers();
 
-	Loader::CreateDataBuffers();
+	GPUResourceUploader::CreateDataBuffers(models); // Create before pipeline
 	PipelineManager::Initialize(m_logicalDevice.GetLogicalDevice());
 	PipelineManager::CreatePipeline("Resources/Shaders/shader2.slang", m_swapChain.GetDepthFormat());
 }
@@ -201,12 +200,12 @@ void VulkanCore::Render()
 		frameResource.commandBuffer,
 		VK_PIPELINE_BIND_POINT_GRAPHICS,
 		pipeline.pipelineLayout,
-		0, 1, Loader::GetDescriptorSet(),
+		0, 1, GPUResourceUploader::GetDescriptorSet(),
 		0, nullptr
 	);
 	
 	// Push constants for camera
-	PushConstants& pushConstants = Loader::GetPushConstants();
+	PushConstants& pushConstants = GPUResourceUploader::GetPushConstants();
 	pushConstants.viewProjection = projection * view;
 	vkCmdPushConstants(frameResource.commandBuffer, pipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), &pushConstants);
 	
@@ -231,7 +230,7 @@ void VulkanCore::Render()
 	vkCmdBindPipeline(frameResource.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline);
 
 	// Draw each mesh
-	std::vector<RenderData> renderData = Loader::GetRenderData();
+	std::vector<RenderData> renderData = GPUResourceUploader::GetRenderData();
 	for (size_t i = 0; i < renderData.size(); i++)
 	{
 		RenderData& data = renderData[i];

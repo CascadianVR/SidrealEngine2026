@@ -5,7 +5,7 @@
 #include <ranges>
 #include <filesystem>
 
-#include "Rendering/Loader.h"
+#include "Rendering/GPUResourceUploader.h"
 namespace fs = std::filesystem;
 
 #include "Rendering/RendererTypes.h"
@@ -161,7 +161,7 @@ void PipelineManager::CreatePipeline(const std::string& fileName, VkFormat depth
 	pipelineLayoutCreateInfo.setLayoutCount = 1;
 	pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
 	pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
-	pipelineLayoutCreateInfo.pSetLayouts = Loader::GetDescriptorSetLayout();
+	pipelineLayoutCreateInfo.pSetLayouts = GPUResourceUploader::GetDescriptorSetLayout();
 	
 	VkPipelineLayout pipelineLayout;
 	if (vkCreatePipelineLayout(m_device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {

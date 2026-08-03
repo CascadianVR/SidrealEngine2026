@@ -1,27 +1,26 @@
 #define TINYGLTF3_IMPLEMENTATION
 #include "Loader.h"
 
-#include <vulkan/vulkan.h>
 #include <fstream>
 #include <filesystem>
-#include <ranges>
-#include <vk_mem_alloc.h>
 #include <glm/ext/matrix_transform.hpp>
 
-#include "Rendering/Vulkan/VulkanCore.h"
 #include "Logger.h"
 #include "json.hpp"
 
 using json = nlohmann::json;
 
-void Loader::LoadScene(const std::string& fileName)
+std::vector<Model> Loader::LoadScene(const std::string& fileName)
 {
+	m_loadedModels.clear();
+	m_modelAssetLookup.clear();
+
 	// Load json scene file
 	std::ifstream file(fileName);
 	if (!file)
 	{
 		Logger::Error("Failed to open file: ", fileName);
-		return;
+		return {};
 	}
 
 	json data = json::parse(file);
@@ -31,7 +30,7 @@ void Loader::LoadScene(const std::string& fileName)
 	if (!data.contains("sceneData") || !data["sceneData"].is_array())
 	{
 		Logger::Error("Scene file is missing a valid \"sceneData\" array.");
-		return;
+		return {};
 	}
 	
 	// Get the "sceneData" object and get each entry
@@ -52,8 +51,8 @@ void Loader::LoadScene(const std::string& fileName)
 			Logger::Warn("Skipping scene object without valid \"path\" field: ", sceneObject.dump());
 			continue;
 		}
-		const std::string modelPath = sceneObject["path"].get<std::string>();	
-		
+		const std::string modelPath = sceneObject["path"].get<std::string>();
+
 		// Model position
 		if (!sceneObject.contains("position") || !sceneObject["position"].is_array() || sceneObject["position"].size() != 3)
 		{
@@ -71,7 +70,7 @@ void Loader::LoadScene(const std::string& fileName)
 		}
 		const json& rotation = sceneObject["rotation"];
 		glm::vec3 modelRotation = { rotation[0].get<float>(),rotation[1].get<float>(),rotation[2].get<float>() };
-		
+
 		// Model scale
 		if (!sceneObject.contains("scale") || !sceneObject["scale"].is_array() || sceneObject["scale"].size() != 3)
 		{
@@ -80,23 +79,23 @@ void Loader::LoadScene(const std::string& fileName)
 		}
 		const json& scale = sceneObject["scale"];
 		glm::vec3 modelScale = { scale[0].get<float>(),scale[1].get<float>(),scale[2].get<float>() };
-		
+
 		// Construct model matrix
 		modelMatrix = glm::translate(glm::mat4(1.0f), modelPosition);
 		modelMatrix = glm::rotate(modelMatrix, glm::radians(modelRotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
 		modelMatrix = glm::rotate(modelMatrix, glm::radians(modelRotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
 		modelMatrix = glm::rotate(modelMatrix, glm::radians(modelRotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
 		modelMatrix = glm::scale(modelMatrix, modelScale);
-		
+
 		Logger::Info("Loading model: ", modelPath);
 		LoadGLB(modelPath, modelMatrix);
 	}
-	
-	for (int i = 0; i < 5; i++)
+
+	for (int i = 0; i < 10; i++)
 	{
-		for (int j = 0; j < 5; j++)
+		for (int j = 0; j < 10; j++)
 		{
-			for (int k = 0; k < 5; k++)
+			for (int k = 0; k < 10; k++)
 			{
 				glm::vec3 position = { static_cast<float>(i) * 1.0f, static_cast<float>(j) * 1.7f, static_cast<float>(k) * -1.0f };
 				glm::vec3 rotation = { 0.0f, 0.0f, 0.0f };
@@ -110,12 +109,12 @@ void Loader::LoadScene(const std::string& fileName)
 			}
 		}
 	}
-	
-	for (int i = 0; i < 5; i++)
+
+	for (int i = 0; i < 10; i++)
 	{
-		for (int j = 0; j < 5; j++)
+		for (int j = 0; j < 10; j++)
 		{
-			for (int k = 0; k < 5; k++)
+			for (int k = 0; k < 10; k++)
 			{
 				glm::vec3 position = { -static_cast<float>(i) * 1.0f - 3.0f, static_cast<float>(j) * 1.7f, static_cast<float>(k) * -1.0f };
 				glm::vec3 rotation = { 0.0f, 0.0f, 0.0f };
@@ -129,16 +128,8 @@ void Loader::LoadScene(const std::string& fileName)
 			}
 		}
 	}
-}
 
-void Loader::CreateDataBuffers()
-{
-	// TCreate the global vertex and index buffers for all the loaded models
-	CreateVertexBuffer();
-	CreateIndexBuffer();
-	CreateInstanceDataBuffer();
-	CreateRenderDataBuffer();
-	CreateDescriptorSet();
+	return m_loadedModels;
 }
 
 void Loader::LoadGLB(const std::string& fileName, glm::mat4& modelMatrix)
@@ -328,367 +319,6 @@ void Loader::GetIndexData(const tg3_model& model, const uint32_t accessorIndex, 
 	}
 
 	mesh.indexCount = static_cast<uint32_t>(mesh.indices.size());
-}
-
-void Loader::CreateVertexBuffer() {
-	size_t totalVertexCount = 0;
-	for (const auto& model : m_loadedModels)
-	{
-		for (const auto& mesh : model.meshes)
-		{
-			totalVertexCount += mesh.vertices.size();
-		}
-	}
-	
-	std::vector<Vertex> vertices;
-	vertices.reserve(totalVertexCount);
-	
-	for (auto& model : m_loadedModels)
-	{
-		for (auto& mesh : model.meshes)
-		{
-			vertices.insert(vertices.end(), mesh.vertices.begin(), mesh.vertices.end());
-			mesh.vertexOffset = static_cast<uint32_t>(vertices.size()) - mesh.vertexCount; // Set the vertex offset for this mesh
-			mesh.vertices.clear();
-		}
-	}
-	
-	const VkDeviceSize vertexBufferSize{ sizeof(Vertex) * vertices.size() };
-	VkBufferCreateInfo bufferCreateInfo {};
-	bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferCreateInfo.size = vertexBufferSize;
-	bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT; // For staging use VK_BUFFER_USAGE_TRANSFER_DST_BIT
-
-	VmaAllocationCreateInfo bufferAllocationCreateInfo {};
-	bufferAllocationCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-	bufferAllocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
-
-	VmaAllocationInfo vertexBufferAllocationInfo{};
-	if (vmaCreateBuffer(VulkanCore::GetAllocator(), &bufferCreateInfo, &bufferAllocationCreateInfo, &m_vertexBuffer, &m_vertexBufferAllocation, &vertexBufferAllocationInfo) != VK_SUCCESS)
-	{
-		Logger::Error("Failed to create vertex buffer for primitive");
-		return;
-	}
-	
-	// Copy vertex data into the mapped allocation
-	if (vertexBufferSize > 0) {
-		memcpy(vertexBufferAllocationInfo.pMappedData, vertices.data(), vertexBufferSize);
-	}
-
-	// Flush to make non-coherent memory visible to the GPU
-	vmaFlushAllocation(VulkanCore::GetAllocator(), m_vertexBufferAllocation, 0, vertexBufferSize);
-
-	// Get address of gpu buffer
-	VkBufferDeviceAddressInfo addressInfo{};
-	addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-	addressInfo.buffer = m_vertexBuffer;
-
-	m_pushConstants.vertexBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
-	
-	Logger::Success("Created vertex buffer");
-}
-
-void Loader::CreateIndexBuffer() {
-	size_t totalIndexCount = 0;
-	for (const auto& model : m_loadedModels)
-	{
-		for (const auto& mesh : model.meshes)
-		{
-			totalIndexCount += mesh.indices.size();
-		}
-	}
-	
-	std::vector<uint32_t> indices;
-	indices.reserve(totalIndexCount);
-	
-	// Loop through all models and meshes and accumulate all indices
-	for (auto& model : m_loadedModels)
-	{
-		for (auto& mesh : model.meshes)
-		{
-			indices.insert(indices.end(), mesh.indices.begin(), mesh.indices.end());
-			mesh.indexOffset = static_cast<uint32_t>(indices.size()) - mesh.indexCount; // Set the index offset for this mesh
-			mesh.indices.clear();
-		}
-	}
-	
-	const VkDeviceSize indexBufferSize{ sizeof(uint32_t) * indices.size() };
-	VkBufferCreateInfo bufferCreateInfo {};
-	bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferCreateInfo.size = indexBufferSize;
-	bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT; // For staging use VK_BUFFER_USAGE_TRANSFER_DST_BIT
-
-	VmaAllocationCreateInfo bufferAllocationCreateInfo {};
-	bufferAllocationCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-	bufferAllocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
-
-	VmaAllocationInfo indexBufferAllocationInfo{};
-	if (vmaCreateBuffer(VulkanCore::GetAllocator(), &bufferCreateInfo, &bufferAllocationCreateInfo, &m_indexBuffer, &m_indexBufferAllocation, &indexBufferAllocationInfo) != VK_SUCCESS)
-	{
-		Logger::Error("Failed to create index buffer for primitive");
-		return;
-	}
-	
-	// Copy index data into the mapped allocation
-	if (indexBufferSize > 0) {
-		memcpy(indexBufferAllocationInfo.pMappedData, indices.data(), indexBufferSize);
-	}
-
-	// Flush to make non-coherent memory visible to the GPU
-	vmaFlushAllocation(VulkanCore::GetAllocator(), m_indexBufferAllocation, 0, indexBufferSize);
-
-	// Get address of gpu buffer
-	VkBufferDeviceAddressInfo addressInfo{};
-	addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-	addressInfo.buffer = m_indexBuffer;
-
-	m_pushConstants.indexBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
-	
-	Logger::Success("Created index buffer");
-}
-
-void Loader::CreateRenderDataBuffer()
-{
-	// Create vector of draw command data
-	m_renderData.clear();
-	for (const auto& model : m_loadedModels)
-	{
-		for (const auto& mesh : model.meshes)
-		{
-			m_renderData.emplace_back(RenderData{
-				.vertexOffset = mesh.vertexOffset,
-				.indexOffset = mesh.indexOffset,
-				.indexCount = mesh.indexCount,
-				.instanceOffset = model.instanceOffset,
-				.instanceCount = model.instanceCount,
-			});
-		}
-	}
-	
-	// Upload to GPU
-	const VkDeviceSize drawCommandBufferSize{ sizeof(RenderData) * m_renderData.size() };
-	VkBufferCreateInfo bufferCreateInfo {};
-	bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferCreateInfo.size = drawCommandBufferSize;
-	bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT; // For staging use VK_BUFFER_USAGE_TRANSFER_DST_BIT
-
-	VmaAllocationCreateInfo bufferAllocationCreateInfo {};
-	bufferAllocationCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-	bufferAllocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
-
-	VmaAllocationInfo indexBufferAllocationInfo{};
-	if (vmaCreateBuffer(VulkanCore::GetAllocator(), &bufferCreateInfo, &bufferAllocationCreateInfo, &m_renderDataBuffer, &m_renderDataBufferAllocation, &indexBufferAllocationInfo) != VK_SUCCESS)
-	{
-		Logger::Error("Failed to create index buffer for primitive");
-		return;
-	}
-	
-	// Copy index data into the mapped allocation
-	if (drawCommandBufferSize > 0) {
-		memcpy(indexBufferAllocationInfo.pMappedData, m_renderData.data(), drawCommandBufferSize);
-	}
-
-	// Flush to make non-coherent memory visible to the GPU
-	vmaFlushAllocation(VulkanCore::GetAllocator(), m_renderDataBufferAllocation, 0, drawCommandBufferSize);
-	
-	// Get address of gpu buffer
-	VkBufferDeviceAddressInfo addressInfo{};
-	addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-	addressInfo.buffer = m_renderDataBuffer;
-	
-	m_pushConstants.renderDataBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
-	
-	Logger::Success("Created render data buffer");
-}
-
-void Loader::CreateInstanceDataBuffer() {
-	// Create vector of draw command data
-	m_instanceData.clear();
-	for (auto& model : m_loadedModels)
-	{
-		for (const auto& mesh : model.meshes)
-		{
-			model.instanceOffset = static_cast<uint32_t>(m_instanceData.size());
-			
-			for (uint32_t i = 0; i < model.instanceCount; ++i)
-			{
-				InstanceData instanceData{
-					.modelMatrix = model.instanceMatrices[i]
-				};
-				m_instanceData.emplace_back(instanceData);
-			}
-		}
-	}
-	
-	// Upload to GPU
-	const VkDeviceSize bufferSize{ sizeof(InstanceData) * m_instanceData.size() };
-	VkBufferCreateInfo bufferCreateInfo {};
-	bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferCreateInfo.size = bufferSize;
-	bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT; // For staging use VK_BUFFER_USAGE_TRANSFER_DST_BIT
-
-	VmaAllocationCreateInfo bufferAllocationCreateInfo {};
-	bufferAllocationCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-	bufferAllocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
-
-	VmaAllocationInfo bufferAllocationInfo{};
-	if (vmaCreateBuffer(VulkanCore::GetAllocator(), &bufferCreateInfo, &bufferAllocationCreateInfo, &dataBuffer, &m_instanceDataBufferAllocation, &bufferAllocationInfo) != VK_SUCCESS)
-	{
-		Logger::Error("Failed to create index buffer for primitive");
-		return;
-	}
-	
-	// Copy index data into the mapped allocation
-	if (bufferSize > 0) {
-		memcpy(bufferAllocationInfo.pMappedData, m_instanceData.data(), bufferSize);
-	}
-
-	// Flush to make non-coherent memory visible to the GPU
-	vmaFlushAllocation(VulkanCore::GetAllocator(), m_instanceDataBufferAllocation, 0, bufferSize);
-	
-	// Get address of gpu buffer
-	VkBufferDeviceAddressInfo addressInfo{};
-	addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-	addressInfo.buffer = dataBuffer;
-	
-	m_pushConstants.instanceDataBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
-	
-	Logger::Success("Created instance data buffer");
-}
-
-void Loader::CreateDescriptorSet()
-{
-	// Vertex buffer
-	m_bindings.push_back({
-		.binding = 0,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
-	});
-
-	// Index buffer
-	m_bindings.push_back({
-		.binding = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
-	});
-	
-	// Instance data buffer
-	m_bindings.push_back({
-		.binding = 2,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
-	});
-	
-	// Render data buffer
-	m_bindings.push_back({
-		.binding = 3,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
-	});
-	
-	// Bindless textures
-	m_bindings.push_back({
-		.binding = 4,
-		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		.descriptorCount = MAX_TEXTURES,
-		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-	});
-	
-	m_bindingFlags[4] =
-	  VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
-	| VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
-	| VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT; // Lets us modify after bind
-	
-	VkDescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{};
-	flagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
-	flagsInfo.bindingCount = static_cast<uint32_t>(m_bindingFlags.size());
-	flagsInfo.pBindingFlags = m_bindingFlags.data();
-	
-	VkDescriptorSetLayoutCreateInfo layoutInfo;
-	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layoutInfo.pNext = &flagsInfo;
-	layoutInfo.bindingCount = static_cast<uint32_t>(m_bindings.size());
-	layoutInfo.pBindings = m_bindings.data();
-	layoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT; // Lets us modify after bind
-	
-	if (vkCreateDescriptorSetLayout(VulkanCore::GetDevice(), &layoutInfo, nullptr, &m_descriptorSetLayout) != VK_SUCCESS)
-	{
-		Logger::Error("Failed to create descriptor set layout");
-		return;
-	}
-
-	constexpr VkDescriptorPoolSize poolSizes[] =
-	{
-		{
-			.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.descriptorCount = 4
-		},
-		{
-			.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.descriptorCount = MAX_TEXTURES
-		}
-	};
-	
-	VkDescriptorPoolCreateInfo poolInfo{};
-	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	poolInfo.poolSizeCount = std::size(poolSizes);
-	poolInfo.pPoolSizes = poolSizes;
-	poolInfo.maxSets = 1;
-	poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT; // Lets us modify after bind
-	
-	if (vkCreateDescriptorPool(VulkanCore::GetDevice(), &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS)
-	{
-		Logger::Error("Failed to create descriptor pool");	
-		return;
-	}
-
-	constexpr uint32_t textureCount = MAX_TEXTURES;
-	VkDescriptorSetVariableDescriptorCountAllocateInfo variableInfo{};
-	variableInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
-	variableInfo.descriptorSetCount = 1;
-	variableInfo.pDescriptorCounts = &textureCount;
-	
-	VkDescriptorSetAllocateInfo allocInfo{};
-	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	allocInfo.descriptorPool = m_descriptorPool;
-	allocInfo.descriptorSetCount = 1;
-	allocInfo.pSetLayouts = &m_descriptorSetLayout;
-	allocInfo.pNext = &variableInfo;
-	
-	if (vkAllocateDescriptorSets(VulkanCore::GetDevice(), &allocInfo, &m_descriptorSet) != VK_SUCCESS)
-	{
-		Logger::Error("Failed to allocate descriptor set");
-		return;
-	}
-	
-	VkDescriptorBufferInfo bufferInfos[4]{};
-	bufferInfos[0].buffer = m_vertexBuffer;
-	bufferInfos[0].range = VK_WHOLE_SIZE;
-	bufferInfos[1].buffer = m_indexBuffer;
-	bufferInfos[1].range = VK_WHOLE_SIZE;
-	bufferInfos[2].buffer = dataBuffer;
-	bufferInfos[2].range = VK_WHOLE_SIZE;
-	bufferInfos[3].buffer = m_renderDataBuffer;
-	bufferInfos[3].range = VK_WHOLE_SIZE;
-
-	VkWriteDescriptorSet writes[4]{};
-	for (int i = 0; i < 4; i++)
-	{
-		writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writes[i].dstSet = m_descriptorSet;
-		writes[i].dstBinding = i;
-		writes[i].descriptorCount = 1;
-		writes[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		writes[i].pBufferInfo = &bufferInfos[i];
-	}
-
-	vkUpdateDescriptorSets(VulkanCore::GetDevice(), 4, writes, 0, nullptr);
-	
-	Logger::Success("Created descriptor set");
 }
 
 int Loader::GetAccessorIndex(const tg3_primitive &primitive, const char* accessorName)
