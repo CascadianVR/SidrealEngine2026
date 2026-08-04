@@ -1,20 +1,22 @@
 #define VMA_IMPLEMENTATION
 #include "VulkanCore.h"
+
+#include <SDL_vulkan.h>
 #include <iostream>
 #include <vector>
 #include <array>
-#include <SDL_vulkan.h>
-#include "Window.h"
-#include "Logger.h"
-#include "glm/glm.hpp"
-#include "Rendering/Vulkan/GPUResourceUploader.h"
-#include "Application.h"
-#include "Rendering/Vulkan/PipelineManager.h"
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/glm.hpp>
 
 #include "Input.h"
+#include "Application.h"
+#include "Window.h"
+#include "Logger.h"
+#include "Rendering/Vulkan/GPUResourceUploader.h"
+#include "Rendering/Vulkan/PipelineManager.h"
+#include "Rendering/Vulkan/RayTracing/AccelerationStructure.h"
 
 float yaw = -90.0f;
 float pitch = 0.0f;
@@ -23,7 +25,7 @@ glm::vec3 cameraPos   = glm::vec3(0.0f, 1.0f, 0.0f);
 glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
 glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
 
-void VulkanCore::Initialize(const Window* window, const std::vector<Model>& models)
+void VulkanCore::Initialize(const Window* window)
 {
 	CreateInstance();
 	CreateDebugCallback();
@@ -35,7 +37,9 @@ void VulkanCore::Initialize(const Window* window, const std::vector<Model>& mode
 	SetupDeviceQueueAndSemaphores();
 	CreateCommandBuffers();
 
-	GPUResourceUploader::CreateDataBuffers(models); // Create before pipeline
+	GPUResourceUploader::CreateDataBuffers(); // Create before pipeline
+	AccelerationStructure::CreateBLASForMeshes();
+	
 	PipelineManager::Initialize(m_logicalDevice.GetLogicalDevice());
 	PipelineManager::CreatePipeline("Resources/Shaders/shader2.slang", m_swapChain.GetDepthFormat());
 }
@@ -135,7 +139,7 @@ void VulkanCore::Render()
 		.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
 		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-		.clearValue{.color{ { 0.0f, 0.1f, 0.1f, 1.0f } }}
+		.clearValue{.color{ { 0.0f, 0.5f, 0.5f, 1.0f } }}
 	};
 	VkRenderingAttachmentInfo depthAttachmentInfo{
 		.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
@@ -205,7 +209,7 @@ void VulkanCore::Render()
 	);
 	
 	// Push constants for camera
-	PushConstants& pushConstants = GPUResourceUploader::GetPushConstants();
+	PushConstants pushConstants{};
 	pushConstants.viewProjection = projection * view;
 	vkCmdPushConstants(frameResource.commandBuffer, pipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), &pushConstants);
 	
@@ -319,6 +323,11 @@ void VulkanCore::CreateInstance()
 	vkEnumerateInstanceVersion(&m_apiVersion);
 	appInfo.apiVersion = m_apiVersion;
 	
+	if (m_apiVersion < VK_API_VERSION_1_3)
+	{
+		Logger::Error("Vulkan API version is too low!");
+		throw std::runtime_error("Vulkan API version is too low!");
+	}
 	
 	// Get SDL extensions
 	unsigned int sdlExtensionCount = 0;
@@ -468,219 +477,6 @@ void VulkanCore::CreateCommandBuffers()
 	}
 
 	Logger::Success("Command buffers created successfully!");
-}
-
-void VulkanCore::CreateDescriptorResources()
-{
-	//VkDevice device = m_logicalDevice.GetLogicalDevice();
-	//
-	//// Create descriptor pool
-	//VkDescriptorPoolSize poolSize{};
-	//poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	//poolSize.descriptorCount = 1;
-	//VkDescriptorPoolCreateInfo poolCI{};
-	//poolCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	//poolCI.poolSizeCount = 1;
-	//poolCI.pPoolSizes = &poolSize;
-	//poolCI.maxSets = 1;
-	//if (vkCreateDescriptorPool(device, &poolCI, nullptr, &m_descriptorPool) != VK_SUCCESS) {
-	//	Logger::Error("Failed to create descriptor pool");
-	//	return;
-	//}
-	//
-	//// Create a simple sampler
-	//VkSamplerCreateInfo samplerCI{};
-	//samplerCI.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-	//samplerCI.magFilter = VK_FILTER_LINEAR;
-	//samplerCI.minFilter = VK_FILTER_LINEAR;
-	//samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-	//samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-	//samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-	//samplerCI.anisotropyEnable = VK_FALSE;
-	//samplerCI.maxAnisotropy = 1.0f;
-	//samplerCI.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-	//samplerCI.unnormalizedCoordinates = VK_FALSE;
-	//samplerCI.compareEnable = VK_FALSE;
-	//samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-	//
-	//if (vkCreateSampler(device, &samplerCI, nullptr, &m_defaultSampler) != VK_SUCCESS) {
-	//	Logger::Error("Failed to create default sampler");
-	//	return;
-	//}
-	//
-	//// Create a 1x1 image (RGBA8) to use as a default texture
-	//VkFormat texFormat = VK_FORMAT_R8G8B8A8_UNORM;
-	//VkImageCreateInfo imageCI{};
-	//imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	//imageCI.imageType = VK_IMAGE_TYPE_2D;
-	//imageCI.format = texFormat;
-	//imageCI.extent.width = 1;
-	//imageCI.extent.height = 1;
-	//imageCI.extent.depth = 1;
-	//imageCI.mipLevels = 1;
-	//imageCI.arrayLayers = 1;
-	//imageCI.samples = VK_SAMPLE_COUNT_1_BIT;
-	//imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
-	//imageCI.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-	//imageCI.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	//
-	//VmaAllocationCreateInfo imgAllocCI{};
-	//imgAllocCI.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-	//
-	//if (vmaCreateImage(m_allocator, &imageCI, &imgAllocCI, &m_defaultTextureImage, &m_defaultTextureAllocation, nullptr) != VK_SUCCESS) {
-	//	Logger::Error("Failed to create default texture image");
-	//	return;
-	//}
-	//
-	//// Create image view
-	//VkImageViewCreateInfo viewCI{};
-	//viewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	//viewCI.image = m_defaultTextureImage;
-	//viewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	//viewCI.format = texFormat;
-	//viewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	//viewCI.subresourceRange.baseMipLevel = 0;
-	//viewCI.subresourceRange.levelCount = 1;
-	//viewCI.subresourceRange.baseArrayLayer = 0;
-	//viewCI.subresourceRange.layerCount = 1;
-	//
-	//if (vkCreateImageView(device, &viewCI, nullptr, &m_defaultTextureImageView) != VK_SUCCESS) {
-	//	Logger::Error("Failed to create default texture image view");
-	//	return;
-	//}
-	//
-	//// Create staging buffer and upload a single white pixel (RGBA)
-	//VkDeviceSize pixelSize = 4;
-	//VkBuffer stagingBuffer = VK_NULL_HANDLE;
-	//VmaAllocation stagingAlloc = VK_NULL_HANDLE;
-	//VmaAllocationInfo stagingAllocInfo{};
-	//
-	//VkBufferCreateInfo bufCI{};
-	//bufCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	//bufCI.size = pixelSize;
-	//bufCI.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-	//
-	//VmaAllocationCreateInfo bufAllocCI{};
-	//bufAllocCI.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-	//bufAllocCI.usage = VMA_MEMORY_USAGE_AUTO;
-	//
-	//if (vmaCreateBuffer(m_allocator, &bufCI, &bufAllocCI, &stagingBuffer, &stagingAlloc, &stagingAllocInfo) != VK_SUCCESS) {
-	//	Logger::Error("Failed to create staging buffer for default texture");
-	//	return;
-	//}
-	//
-	//unsigned char whitePixel[4] = { 255, 255, 255, 255 };
-	//
-	//if (stagingAllocInfo.pMappedData == nullptr) {
-	//	Logger::Error("Failed to map staging buffer for default texture");
-	//	return;
-	//}
-	//memcpy(stagingAllocInfo.pMappedData, whitePixel, pixelSize);
-	//
-	//// Record a short command buffer to transition and copy
-	//VkCommandBufferAllocateInfo allocInfo{};
-	//allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	//allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	//allocInfo.commandPool = m_commandPool;
-	//allocInfo.commandBufferCount = 1;
-	//
-	//VkCommandBuffer cmdBuf;
-	//if (vkAllocateCommandBuffers(device, &allocInfo, &cmdBuf) != VK_SUCCESS) {
-	//	Logger::Error("Failed to allocate command buffer for texture upload");
-	//	return;
-	//}
-	//
-	//VkCommandBufferBeginInfo beginInfo{};
-	//beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	//beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	//
-	//vkBeginCommandBuffer(cmdBuf, &beginInfo);
-	//
-	//VkImageMemoryBarrier barrierToTransfer{};
-	//barrierToTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	//barrierToTransfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	//barrierToTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	//barrierToTransfer.srcAccessMask = 0;
-	//barrierToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-	//barrierToTransfer.image = m_defaultTextureImage;
-	//barrierToTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	//barrierToTransfer.subresourceRange.levelCount = 1;
-	//barrierToTransfer.subresourceRange.layerCount = 1;
-	//
-	//vkCmdPipelineBarrier(cmdBuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-	//	0, nullptr, 0, nullptr, 1, &barrierToTransfer);
-	//
-	//VkBufferImageCopy copyRegion{};
-	//copyRegion.bufferOffset = 0;
-	//copyRegion.bufferRowLength = 0;
-	//copyRegion.bufferImageHeight = 0;
-	//copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	//copyRegion.imageSubresource.mipLevel = 0;
-	//copyRegion.imageSubresource.baseArrayLayer = 0;
-	//copyRegion.imageSubresource.layerCount = 1;
-	//copyRegion.imageOffset = { 0,0,0 };
-	//copyRegion.imageExtent = { 1,1,1 };
-	//
-	//vkCmdCopyBufferToImage(cmdBuf, stagingBuffer, m_defaultTextureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-	//
-	//VkImageMemoryBarrier barrierToShader{};
-	//barrierToShader.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	//barrierToShader.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	//barrierToShader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	//barrierToShader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-	//barrierToShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-	//barrierToShader.image = m_defaultTextureImage;
-	//barrierToShader.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	//barrierToShader.subresourceRange.levelCount = 1;
-	//barrierToShader.subresourceRange.layerCount = 1;
-	//
-	//vkCmdPipelineBarrier(cmdBuf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-	//	0, nullptr, 0, nullptr, 1, &barrierToShader);
-	//
-	//vkEndCommandBuffer(cmdBuf);
-	//
-	//VkSubmitInfo submitInfo{};
-	//submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	//submitInfo.commandBufferCount = 1;
-	//submitInfo.pCommandBuffers = &cmdBuf;
-	//
-	//vkQueueSubmit(m_queue, 1, &submitInfo, VK_NULL_HANDLE);
-	//vkQueueWaitIdle(m_queue);
-	//
-	//vkFreeCommandBuffers(device, m_commandPool, 1, &cmdBuf);
-	//
-	//// cleanup staging buffer
-	//vmaDestroyBuffer(m_allocator, stagingBuffer, stagingAlloc);
-	//
-	//// Allocate descriptor set
-	//Shader shader = Shaders::GetShader("shader.slang");
-	//VkDescriptorSetAllocateInfo dsAlloc{};
-	//dsAlloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	//dsAlloc.descriptorPool = m_descriptorPool;
-	//dsAlloc.descriptorSetCount = 1;
-	//dsAlloc.pSetLayouts = &shader.descriptorSetLayoutTex;
-	//
-	//if (vkAllocateDescriptorSets(device, &dsAlloc, &m_descriptorSetTex) != VK_SUCCESS) {
-	//	Logger::Error("Failed to allocate descriptor set for default texture");
-	//	return;
-	//}
-	//
-	//VkDescriptorImageInfo imageInfo{};
-	//imageInfo.sampler = m_defaultSampler;
-	//imageInfo.imageView = m_defaultTextureImageView;
-	//imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	//
-	//VkWriteDescriptorSet write{};
-	//write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	//write.dstSet = m_descriptorSetTex;
-	//write.dstBinding = 0;
-	//write.dstArrayElement = 0;
-	//write.descriptorCount = 1;
-	//write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	//write.pImageInfo = &imageInfo;
-	//
-	//vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
-	//Logger::Success("Descriptor resources created");
 }
 
 void VulkanCore::DestroyDescriptorResources()

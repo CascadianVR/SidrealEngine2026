@@ -11,17 +11,21 @@
 
 using json = nlohmann::json;
 
-std::vector<Model> Loader::LoadScene(const std::string& fileName)
+void Loader::LoadScene(const std::string& fileName)
 {
 	m_loadedModels.clear();
 	m_modelLookup.clear();
+	m_loadedTextures.clear();
+	m_loadedTextures.reserve(1);
+	m_loadedTextures.push_back({});
+	LoadFallbackTexture("Resources\\Textures\\fallback.png");
 
 	// Load json scene file
 	std::ifstream file(fileName);
 	if (!file)
 	{
 		Logger::Error("Failed to open file: ", fileName);
-		return {};
+		return;
 	}
 
 	json data = json::parse(file);
@@ -31,7 +35,7 @@ std::vector<Model> Loader::LoadScene(const std::string& fileName)
 	if (!data.contains("sceneData") || !data["sceneData"].is_array())
 	{
 		Logger::Error("Scene file is missing a valid \"sceneData\" array.");
-		return {};
+		return;
 	}
 	
 	// Get the "sceneData" object and get each entry
@@ -92,45 +96,85 @@ std::vector<Model> Loader::LoadScene(const std::string& fileName)
 		LoadGLB(modelPath, modelMatrix);
 	}
 
-	for (int i = 0; i < 5; i++)
+	//for (int i = 0; i < 5; i++)
+	//{
+	//	for (int j = 0; j < 5; j++)
+	//	{
+	//		for (int k = 0; k < 5; k++)
+	//		{
+	//			glm::vec3 position = { static_cast<float>(i) * 1.0f, static_cast<float>(j) * 1.7f, static_cast<float>(k) * -1.0f };
+	//			glm::vec3 rotation = { 0.0f, 0.0f, 0.0f };
+	//			glm::vec3 scale = { 1.0f, 1.0f, 1.0f };
+	//			modelMatrix = glm::translate(glm::mat4(1.0f), position);
+	//			modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+	//			modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+	//			modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+	//			modelMatrix = glm::scale(modelMatrix, scale);
+	//			LoadGLB("Resources\\Models\\Cascadia.glb", modelMatrix);
+	//		}
+	//	}
+	//}
+	//
+	//for (int i = 0; i < 5; i++)
+	//{
+	//	for (int j = 0; j < 5; j++)
+	//	{
+	//		for (int k = 0; k < 5; k++)
+	//		{
+	//			glm::vec3 position = { -static_cast<float>(i) * 1.0f - 3.0f, static_cast<float>(j) * 1.7f, static_cast<float>(k) * -1.0f };
+	//			glm::vec3 rotation = { 0.0f, 0.0f, 0.0f };
+	//			glm::vec3 scale = { 1.0f, 1.0f, 1.0f };
+	//			modelMatrix = glm::translate(glm::mat4(1.0f), position);
+	//			modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+	//			modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+	//			modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+	//			modelMatrix = glm::scale(modelMatrix, scale);
+	//			LoadGLB("Resources\\Models\\ThickBase5.glb", modelMatrix);
+	//		}
+	//	}
+	//}
+}
+
+void Loader::LoadFallbackTexture(const std::string& fileName)
+{
+	std::ifstream file(fileName, std::ios::binary | std::ios::ate);
+	if (!file)
 	{
-		for (int j = 0; j < 5; j++)
-		{
-			for (int k = 0; k < 5; k++)
-			{
-				glm::vec3 position = { static_cast<float>(i) * 1.0f, static_cast<float>(j) * 1.7f, static_cast<float>(k) * -1.0f };
-				glm::vec3 rotation = { 0.0f, 0.0f, 0.0f };
-				glm::vec3 scale = { 1.0f, 1.0f, 1.0f };
-				modelMatrix = glm::translate(glm::mat4(1.0f), position);
-				modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-				modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-				modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-				modelMatrix = glm::scale(modelMatrix, scale);
-				LoadGLB("Resources\\Models\\Cascadia.glb", modelMatrix);
-			}
-		}
+		Logger::Error("Failed to open fallback texture: ", fileName);
+		return;
 	}
 
-	for (int i = 0; i < 5; i++)
+	std::streamsize size = file.tellg();
+	if (size < 0)
 	{
-		for (int j = 0; j < 5; j++)
-		{
-			for (int k = 0; k < 5; k++)
-			{
-				glm::vec3 position = { -static_cast<float>(i) * 1.0f - 3.0f, static_cast<float>(j) * 1.7f, static_cast<float>(k) * -1.0f };
-				glm::vec3 rotation = { 0.0f, 0.0f, 0.0f };
-				glm::vec3 scale = { 1.0f, 1.0f, 1.0f };
-				modelMatrix = glm::translate(glm::mat4(1.0f), position);
-				modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-				modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-				modelMatrix = glm::rotate(modelMatrix, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-				modelMatrix = glm::scale(modelMatrix, scale);
-				LoadGLB("Resources\\Models\\ThickBase5.glb", modelMatrix);
-			}
-		}
+		Logger::Error("Failed to get fallback texture file size: ", fileName);
+		return;
 	}
 
-	return m_loadedModels;
+	std::vector<uint8_t> data(static_cast<size_t>(size));
+	file.seekg(0, std::ios::beg);
+	if (!file.read(reinterpret_cast<char*>(data.data()), size))
+	{
+		Logger::Error("Failed to read fallback texture: ", fileName);
+		return;
+	}
+
+	int w, h, channels;
+	stbi_uc* pixels = stbi_load_from_memory(data.data(), static_cast<int>(size), &w, &h, &channels, 4);
+	if (pixels)
+	{
+		Texture& texture = m_loadedTextures[0];
+		texture.width = w;
+		texture.height = h;
+		texture.channels = channels;
+		texture.pixels.assign(pixels, pixels + w * h * 4);
+		Logger::Success("Loaded fallback texture: ", w, "x", h, " RGBA");
+		stbi_image_free(pixels);
+	}
+	else
+	{
+		Logger::Error("Failed to decode fallback texture: ", stbi_failure_reason());
+	}
 }
 
 void Loader::LoadGLB(const std::string& fileName, glm::mat4& modelMatrix)
@@ -197,7 +241,8 @@ void Loader::LoadGLB(const std::string& fileName, glm::mat4& modelMatrix)
 		return;
 	}
 	
-	m_loadedTextures.resize(gltfModel.images_count);
+	size_t startSize = m_loadedTextures.size();
+	m_loadedTextures.resize(startSize + gltfModel.images_count);
 	for (uint32_t t = 0; t < gltfModel.images_count; t++)
 	{
 		const tg3_image& image = gltfModel.images[t];
@@ -216,16 +261,18 @@ void Loader::LoadGLB(const std::string& fileName, glm::mat4& modelMatrix)
 			);
 			if (pixels)
 			{
-				size_t size = static_cast<size_t>(w * h * 4);
+				size_t newCapacity = w * h * 4;
 				
 				Texture texture;
 				texture.width = w;
 				texture.height = h;
 				texture.channels = channels;
-				texture.pixels.reserve(size);
-				texture.pixels.assign(pixels, pixels + size);
-				Logger::Info("  Decoded: ", w, "x", h, " RGBA (", size, " bytes)");
+				texture.pixels.reserve(newCapacity);
+				texture.pixels.assign(pixels, pixels + newCapacity);
+				Logger::Info("  Decoded: ", w, "x", h, " RGBA (", newCapacity, " bytes)");
 				stbi_image_free(pixels);
+
+				m_loadedTextures[startSize + t] = texture;
 			}
 			else
 			{
@@ -268,7 +315,7 @@ void Loader::LoadGLB(const std::string& fileName, glm::mat4& modelMatrix)
 			Mesh mesh;
 			GetVertexData(gltfModel, primitive, mesh);
 			GetIndexData(gltfModel, primitive.indices, mesh);
-			GetTextureData(gltfModel, primitive, mesh);
+			GetTextureData(gltfModel, primitive, mesh, startSize);
 
 			model.meshes.push_back(mesh);
 		}
@@ -377,21 +424,21 @@ void Loader::GetIndexData(const tg3_model& model, const uint32_t accessorIndex, 
 	mesh.indexCount = static_cast<uint32_t>(mesh.indices.size());
 }
 
-void Loader::GetTextureData(const tg3_model& model, const tg3_primitive& primitive, Mesh& mesh)
+void Loader::GetTextureData(const tg3_model& model, const tg3_primitive& primitive, Mesh& mesh, size_t textureOffset)
 {
 	const uint32_t materialIndex = primitive.material;
 	if (materialIndex >= static_cast<uint32_t>(0) && materialIndex < model.materials_count) 
 	{
 		const tg3_material& material = model.materials[materialIndex];
-            
+		
 		// Get the base color texture index from the material
 		const uint32_t textureIndex = material.pbr_metallic_roughness.base_color_texture.index;
 		
 		if (textureIndex >= static_cast<uint32_t>(0) && textureIndex < model.textures_count)
 		{
-			// Use texture index to get the source image index
+			// Use texture index to get the source image index, offset by global texture array
 			const tg3_texture& gltfTexture = model.textures[textureIndex];
-			mesh.imageIndex = gltfTexture.source;
+			mesh.textureIndex = static_cast<uint32_t>(textureOffset + gltfTexture.source);
 		}
 	} 
 	else 

@@ -18,13 +18,10 @@ struct RenderData
     uint32_t indexCount;     // Number of indices in this mesh
     uint32_t instanceOffset; // Offset in the instance buffer
     uint32_t instanceCount;  // Number of instances to render
+    uint32_t textureIndex;   // Index of the texture to use
 };
 
 struct PushConstants {
-    uint64_t vertexBuffer;
-    uint64_t indexBuffer;
-    uint64_t renderDataBuffer;
-    uint64_t instanceDataBuffer;
     float4x4 viewProjection;
 };
 
@@ -43,12 +40,19 @@ StructuredBuffer<InstanceData> g_Instances;
 [[vk::binding(3, 0)]]
 StructuredBuffer<RenderData> g_RenderDatas;
 
+[[vk::binding(4, 0)]]
+SamplerState g_Sampler;
+
+[[vk::binding(5, 0)]]
+Texture2D<float4> g_Textures[128];
+
 struct VSOutput
 {
     float4 position : SV_POSITION;
     float3 normal : NORMAL;
     float2 uv : TEXCOORD0;
-    float4 worldPos : TEXCOORD1;
+    [[vk::flat]]
+    uint32_t textureIndex : TEXCOORD1;
 };
 
 [shader("vertex")]
@@ -72,7 +76,7 @@ VSOutput main(uint32_t vertexID: SV_VertexID, uint32_t instanceID: SV_InstanceID
 
     output.normal = normalize(mul((float3x3)instance.modelMatrix, v.normal.xyz));
     output.uv = v.uv.xy;
-    output.worldPos = worldPosition;
+    output.textureIndex = renderData.textureIndex;
 
     return output;
 }
@@ -83,7 +87,10 @@ float4 main(VSOutput input) : SV_TARGET
     float3 normal = normalize(input.normal);
     float3 lightDir = float3(0.5f, 0.5f, 0.5f);
 
-    float NdotL = max(dot(normal, normalize(lightDir)) * 0.5f + 0.5f, 0.0);
+    float NdotL = max(dot(normal, normalize(lightDir)) * 0.5f + 0.5f, 0.5);
+    NdotL = smoothstep(0.3, 0.6, NdotL);
 
-    return float4((normal * 0.5 + 0.5) * NdotL.xxx, 1.0);
+    float4 color = g_Textures[input.textureIndex].Sample(g_Sampler, input.uv);
+
+    return float4(color.xyz * NdotL.xxx, 1.0);
 }

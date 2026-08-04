@@ -1,6 +1,7 @@
 #include "Application.h"
 
 #include "Input.h"
+#include "Logger.h"
 #include "Rendering/Vulkan/VulkanCore.h"
 #include "Rendering/Loader.h"
 
@@ -11,8 +12,8 @@ void Application::Initialize()
 	m_window = std::make_unique<Window>(1280, 720, "Vulkan Window");
 	m_window->Show();
 
-	auto models = Loader::LoadScene("Resources\\Scenes\\DefaultScene.json");
-	VulkanCore::Initialize(m_window.get(), models);
+	Loader::LoadScene("Resources\\Scenes\\DefaultScene.json");
+	VulkanCore::Initialize(m_window.get());
 
 	Input::Initialize(m_window.get());
 

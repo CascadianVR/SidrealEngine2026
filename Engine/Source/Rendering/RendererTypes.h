@@ -28,7 +28,7 @@ struct Mesh {
 	uint32_t indexCount;
 	uint32_t vertexOffset;
 	uint32_t indexOffset;
-	uint32_t imageIndex;
+	uint32_t textureIndex = 0;
 };
 
 struct Model {
@@ -52,6 +52,7 @@ struct RenderData
 	uint32_t indexCount;     // Number of indices in this mesh
 	uint32_t instanceOffset; // Offset in the instance buffer
 	uint32_t instanceCount;  // Number of instances to render
+	uint32_t textureIndex;   // Index of the texture to use
 };
 
 struct Pipeline {
@@ -61,10 +62,6 @@ struct Pipeline {
 };
 
 struct PushConstants {
-	VkDeviceAddress vertexBufferDeviceAddress;
-	VkDeviceAddress indexBufferDeviceAddress;
-	VkDeviceAddress renderDataBufferDeviceAddress;
-	VkDeviceAddress instanceDataBufferDeviceAddress;
 	glm::mat4 viewProjection;
 };
 

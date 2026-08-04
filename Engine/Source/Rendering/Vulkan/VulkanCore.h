@@ -13,10 +13,14 @@ class Window;
 
 class VulkanCore {
 public:
-	static void Initialize(const Window* window, const std::vector<Model>& models);
+	static void Initialize(const Window* window);
 	static void Render();
 	static VmaAllocator GetAllocator() { return m_allocator; }
+	
 	static VkDevice GetDevice() { return m_logicalDevice.GetLogicalDevice(); }
+	static uint32_t GetQueueFamilyIndex() { return m_physicalDevice.GetGraphicsQueueFamilyIndex(); }
+	static VkQueue GetQueue() { return m_queue; }
+	
 	static constexpr uint32_t MaxFramesInFlight = 2;
 	static constexpr int MAX_TEXTURES = 128;
 private:
@@ -52,7 +56,6 @@ private:
 	static void CreateDebugCallback();
 	static void CreateSurface(const Window* window);
 	static void CreateMemoryAllocator();
-	static void CreateDescriptorResources();
 	static void DestroyDescriptorResources();
 	static void Shutdown();
 	static void SetupDeviceQueueAndSemaphores();

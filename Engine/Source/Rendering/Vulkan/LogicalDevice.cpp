@@ -16,13 +16,25 @@ LogicalDevice::LogicalDevice(PhysicalDevice& physicalDevice)
 	queueCreateInfo.flags = 0;
 
 	std::vector<const char*> deviceExtensions = {
-		VK_KHR_SWAPCHAIN_EXTENSION_NAME
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
 	};
 
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures{};
+	accelerationStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+	accelerationStructureFeatures.accelerationStructure = VK_TRUE;
+	
+	VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures{};
+	rayQueryFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
+	rayQueryFeatures.rayQuery = VK_TRUE;
+	rayQueryFeatures.pNext = &accelerationStructureFeatures;
+	
 	VkPhysicalDeviceVulkan11Features features11{};
 	features11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
 	features11.shaderDrawParameters = VK_TRUE;
-
+	features11.pNext = &rayQueryFeatures;
+	
 	VkPhysicalDeviceVulkan12Features features12{};
 	features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
 	features12.bufferDeviceAddress = VK_TRUE;
@@ -40,15 +52,11 @@ LogicalDevice::LogicalDevice(PhysicalDevice& physicalDevice)
 	features13.dynamicRendering = VK_TRUE;
 	features13.pNext = &features12;
 
-	VkPhysicalDeviceVulkan14Features features14{};
-	features14.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES;
-	features14.pNext = &features13;
-
 	VkPhysicalDeviceFeatures2 features2{};
 	features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 	features2.features.samplerAnisotropy = VK_TRUE;
 	features2.features.shaderInt64 = VK_TRUE;
-	features2.pNext = &features14;
+	features2.pNext = &features13;
 
 	// Create a logical device
 	VkDeviceCreateInfo createInfo{};

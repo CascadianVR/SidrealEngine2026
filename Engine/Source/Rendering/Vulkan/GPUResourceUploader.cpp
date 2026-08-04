@@ -1,14 +1,22 @@
 #include "GPUResourceUploader.h"
 
+#include <queue>
+
 #include "Rendering/Vulkan/VulkanCore.h"
 #include "Logger.h"
+#include "Rendering/Loader.h"
 
-void GPUResourceUploader::CreateDataBuffers(const std::vector<Model>& models)
+void GPUResourceUploader::CreateDataBuffers()
 {
+	const std::vector<Model>& models = Loader::GetLoadedModels();
+	const std::vector<Texture>& textures = Loader::GetLoadedTextures();
+	
 	CreateVertexBuffer(models);
 	CreateIndexBuffer(models);
 	CreateInstanceDataBuffer(models);
 	CreateRenderDataBuffer(models);
+	CreateTextureDataBuffer(textures);
+	CreateSampler();
 	CreateDescriptorSet();
 }
 
@@ -63,7 +71,7 @@ void GPUResourceUploader::CreateVertexBuffer(const std::vector<Model>& models) {
 	addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
 	addressInfo.buffer = m_vertexBuffer;
 
-	m_pushConstants.vertexBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
+	m_vertexBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
 
 	Logger::Success("Created vertex buffer");
 }
@@ -116,7 +124,7 @@ void GPUResourceUploader::CreateIndexBuffer(const std::vector<Model>& models) {
 	addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
 	addressInfo.buffer = m_indexBuffer;
 
-	m_pushConstants.indexBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
+	m_indexBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
 
 	Logger::Success("Created index buffer");
 }
@@ -137,6 +145,7 @@ void GPUResourceUploader::CreateRenderDataBuffer(const std::vector<Model>& model
 				.indexCount = mesh.indexCount,
 				.instanceOffset = instanceOffset,
 				.instanceCount = model.instanceCount,
+				.textureIndex = mesh.textureIndex
 			});
 			vertexOffset += mesh.vertexCount;
 			indexOffset += mesh.indexCount;
@@ -171,7 +180,7 @@ void GPUResourceUploader::CreateRenderDataBuffer(const std::vector<Model>& model
 	addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
 	addressInfo.buffer = m_renderDataBuffer;
 
-	m_pushConstants.renderDataBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
+	m_renderDataBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
 
 	Logger::Success("Created render data buffer");
 }
@@ -200,7 +209,7 @@ void GPUResourceUploader::CreateInstanceDataBuffer(const std::vector<Model>& mod
 	bufferAllocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
 	VmaAllocationInfo bufferAllocationInfo{};
-	if (vmaCreateBuffer(VulkanCore::GetAllocator(), &bufferCreateInfo, &bufferAllocationCreateInfo, &dataBuffer, &m_instanceDataBufferAllocation, &bufferAllocationInfo) != VK_SUCCESS)
+	if (vmaCreateBuffer(VulkanCore::GetAllocator(), &bufferCreateInfo, &bufferAllocationCreateInfo, &m_instanceDataBuffer, &m_instanceDataBufferAllocation, &bufferAllocationInfo) != VK_SUCCESS)
 	{
 		Logger::Error("Failed to create instance data buffer");
 		return;
@@ -214,15 +223,206 @@ void GPUResourceUploader::CreateInstanceDataBuffer(const std::vector<Model>& mod
 
 	VkBufferDeviceAddressInfo addressInfo{};
 	addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-	addressInfo.buffer = dataBuffer;
+	addressInfo.buffer = m_instanceDataBuffer;
 
-	m_pushConstants.instanceDataBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
+	m_instanceDataBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
 
 	Logger::Success("Created instance data buffer");
 }
 
+void GPUResourceUploader::CreateTextureDataBuffer(const std::vector<Texture>& textures)
+{
+	VkCommandPoolCreateInfo poolCI{};
+	poolCI.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	poolCI.queueFamilyIndex = VulkanCore::GetQueueFamilyIndex();
+	poolCI.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+
+	VkCommandPool uploadPool;
+	if (vkCreateCommandPool(VulkanCore::GetDevice(), &poolCI, nullptr, &uploadPool) != VK_SUCCESS)
+	{
+		Logger::Error("Failed to create upload command pool");
+		return;
+	}
+
+	VkFenceCreateInfo fenceCI{ .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = VK_FENCE_CREATE_SIGNALED_BIT };
+	VkFence fenceOneTime{};
+	if (vkCreateFence(VulkanCore::GetDevice(), &fenceCI, nullptr, &fenceOneTime) != VK_SUCCESS)
+	{
+		Logger::Error("Failed to create upload fence");
+		vkDestroyCommandPool(VulkanCore::GetDevice(), uploadPool, nullptr);
+		return;
+	}
+
+	m_textureImages.resize(textures.size());
+	m_textureImageViews.resize(textures.size());
+	m_textureAllocations.resize(textures.size());
+
+	for (size_t i = 0; i < textures.size(); i++)
+	{
+		const Texture& texture = textures[i];
+
+		VkImageCreateInfo imageCreateInfo{};
+		imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+		imageCreateInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+		imageCreateInfo.extent = { static_cast<uint32_t>(texture.width), static_cast<uint32_t>(texture.height), 1 };
+		imageCreateInfo.mipLevels = 1;
+		imageCreateInfo.arrayLayers = 1;
+		imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+		imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+		imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+		imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+		VmaAllocationCreateInfo imageAllocCI{};
+		imageAllocCI.usage = VMA_MEMORY_USAGE_AUTO;
+
+		if (vmaCreateImage(VulkanCore::GetAllocator(), &imageCreateInfo, &imageAllocCI, &m_textureImages[i], &m_textureAllocations[i], nullptr) != VK_SUCCESS)
+		{
+			Logger::Error("Failed to create texture image");
+			return;
+		}
+
+		VkImageViewCreateInfo ivCI{};
+		ivCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		ivCI.image = m_textureImages[i];
+		ivCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		ivCI.format = VK_FORMAT_R8G8B8A8_SRGB;
+		ivCI.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+
+		if (vkCreateImageView(VulkanCore::GetDevice(), &ivCI, nullptr, &m_textureImageViews[i]) != VK_SUCCESS)
+		{
+			Logger::Error("Failed to create texture image view");
+			return;
+		}
+
+		VkBuffer stagingBuffer{};
+		VmaAllocation stagingAllocation{};
+		VkBufferCreateInfo stagingBI{};
+		stagingBI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		stagingBI.size = texture.pixels.size();
+		stagingBI.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+		VmaAllocationCreateInfo stagingAllocCI{};
+		stagingAllocCI.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+		stagingAllocCI.usage = VMA_MEMORY_USAGE_AUTO;
+
+		VmaAllocationInfo stagingAllocInfo{};
+		if (vmaCreateBuffer(VulkanCore::GetAllocator(), &stagingBI, &stagingAllocCI, &stagingBuffer, &stagingAllocation, &stagingAllocInfo) != VK_SUCCESS)
+		{
+			Logger::Error("Failed to create staging buffer");
+			return;
+		}
+
+		memcpy(stagingAllocInfo.pMappedData, texture.pixels.data(), texture.pixels.size());
+		vmaFlushAllocation(VulkanCore::GetAllocator(), stagingAllocation, 0, texture.pixels.size());
+
+		VkCommandBuffer cb{};
+		VkCommandBufferAllocateInfo allocCI{};
+		allocCI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocCI.commandPool = uploadPool;
+		allocCI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		allocCI.commandBufferCount = 1;
+		if (vkAllocateCommandBuffers(VulkanCore::GetDevice(), &allocCI, &cb) != VK_SUCCESS)
+		{
+			Logger::Error("Failed to allocate command buffer");
+			vmaDestroyBuffer(VulkanCore::GetAllocator(), stagingBuffer, stagingAllocation);
+			return;
+		}
+
+		VkCommandBufferBeginInfo beginBI{};
+		beginBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginBI.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+		vkBeginCommandBuffer(cb, &beginBI);
+
+		VkImageMemoryBarrier2 toTransfer{
+			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+			.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+			.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+			.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+			.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			.image = m_textureImages[i],
+			.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+		};
+		VkDependencyInfo depInfo{};
+		depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+		depInfo.imageMemoryBarrierCount = 1;
+		depInfo.pImageMemoryBarriers = &toTransfer;
+		vkCmdPipelineBarrier2(cb, &depInfo);
+
+		VkBufferImageCopy region{};
+		region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+		region.imageExtent = { static_cast<uint32_t>(texture.width), static_cast<uint32_t>(texture.height), 1 };
+		vkCmdCopyBufferToImage(cb, stagingBuffer, m_textureImages[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+		VkImageMemoryBarrier2 toRead{
+			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+			.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+			.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+			.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+			.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+			.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			.image = m_textureImages[i],
+			.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+		};
+		depInfo.pImageMemoryBarriers = &toRead;
+		vkCmdPipelineBarrier2(cb, &depInfo);
+
+		vkEndCommandBuffer(cb);
+
+		vkResetFences(VulkanCore::GetDevice(), 1, &fenceOneTime);
+		VkCommandBufferSubmitInfo cbSI{};
+		cbSI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+		cbSI.commandBuffer = cb;
+		VkSubmitInfo2 submitInfo{};
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+		submitInfo.commandBufferInfoCount = 1;
+		submitInfo.pCommandBufferInfos = &cbSI;
+		if (vkQueueSubmit2(VulkanCore::GetQueue(), 1, &submitInfo, fenceOneTime) != VK_SUCCESS)
+		{
+			Logger::Error("Failed to submit upload command buffer");
+		}
+		vkWaitForFences(VulkanCore::GetDevice(), 1, &fenceOneTime, VK_TRUE, UINT64_MAX);
+
+		vkFreeCommandBuffers(VulkanCore::GetDevice(), uploadPool, 1, &cb);
+		vmaDestroyBuffer(VulkanCore::GetAllocator(), stagingBuffer, stagingAllocation);
+
+		Logger::Success("Uploaded texture ", i, ": ", texture.width, "x", texture.height);
+	}
+
+	vkDestroyCommandPool(VulkanCore::GetDevice(), uploadPool, nullptr);
+	vkDestroyFence(VulkanCore::GetDevice(), fenceOneTime, nullptr);
+}
+
+void GPUResourceUploader::CreateSampler()
+{
+	VkSamplerCreateInfo samplerCI{};
+	samplerCI.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	samplerCI.magFilter = VK_FILTER_LINEAR;
+	samplerCI.minFilter = VK_FILTER_LINEAR;
+	samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	samplerCI.anisotropyEnable = VK_TRUE;
+	samplerCI.maxAnisotropy = 16.0f; // Should query VkPhysicalDeviceLimits::maxSamplerAnisotropy and clamp
+	samplerCI.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+	samplerCI.unnormalizedCoordinates = VK_FALSE;
+	samplerCI.compareEnable = VK_FALSE;
+	samplerCI.compareOp = VK_COMPARE_OP_ALWAYS;
+
+	if (vkCreateSampler(VulkanCore::GetDevice(), &samplerCI, nullptr, &m_sampler) != VK_SUCCESS)
+	{
+		Logger::Error("Failed to create sampler");
+		return;
+	}
+
+	Logger::Success("Created sampler");
+}
+
 void GPUResourceUploader::CreateDescriptorSet()
 {
+	m_bindings.clear();
+	
 	m_bindings.push_back({
 		.binding = 0,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -253,12 +453,20 @@ void GPUResourceUploader::CreateDescriptorSet()
 
 	m_bindings.push_back({
 		.binding = 4,
+		.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+	});
+
+	m_bindings.push_back({
+		.binding = 5,
 		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 		.descriptorCount = MAX_TEXTURES,
 		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
 	});
 
-	m_bindingFlags[4] =
+	// WARNING FRAGILE
+	m_bindingFlags[5] =
 	  VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
 	| VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
 	| VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
@@ -290,6 +498,10 @@ void GPUResourceUploader::CreateDescriptorSet()
 		{
 			.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 			.descriptorCount = MAX_TEXTURES
+		},
+		{
+			.type = VK_DESCRIPTOR_TYPE_SAMPLER,
+			.descriptorCount = 1
 		}
 	};
 
@@ -330,23 +542,55 @@ void GPUResourceUploader::CreateDescriptorSet()
 	bufferInfos[0].range = VK_WHOLE_SIZE;
 	bufferInfos[1].buffer = m_indexBuffer;
 	bufferInfos[1].range = VK_WHOLE_SIZE;
-	bufferInfos[2].buffer = dataBuffer;
+	bufferInfos[2].buffer = m_instanceDataBuffer;
 	bufferInfos[2].range = VK_WHOLE_SIZE;
 	bufferInfos[3].buffer = m_renderDataBuffer;
 	bufferInfos[3].range = VK_WHOLE_SIZE;
 
-	VkWriteDescriptorSet writes[4]{};
+	VkWriteDescriptorSet bufferWrites[4]{};
 	for (int i = 0; i < 4; i++)
 	{
-		writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writes[i].dstSet = m_descriptorSet;
-		writes[i].dstBinding = i;
-		writes[i].descriptorCount = 1;
-		writes[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		writes[i].pBufferInfo = &bufferInfos[i];
+		bufferWrites[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		bufferWrites[i].dstSet = m_descriptorSet;
+		bufferWrites[i].dstBinding = i;
+		bufferWrites[i].descriptorCount = 1;
+		bufferWrites[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		bufferWrites[i].pBufferInfo = &bufferInfos[i];
 	}
 
-	vkUpdateDescriptorSets(VulkanCore::GetDevice(), 4, writes, 0, nullptr);
+	std::vector<VkDescriptorImageInfo> imageInfos(m_textureImageViews.size());
+	for (size_t i = 0; i < m_textureImageViews.size(); i++)
+	{
+		imageInfos[i].sampler = m_sampler;
+		imageInfos[i].imageView = m_textureImageViews[i];
+		imageInfos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	}
+
+	VkWriteDescriptorSet textureWrite{};
+	textureWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	textureWrite.dstSet = m_descriptorSet;
+	textureWrite.dstBinding = 5;
+	textureWrite.descriptorCount = static_cast<uint32_t>(imageInfos.size());
+	textureWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	textureWrite.pImageInfo = imageInfos.data();
+
+	VkDescriptorImageInfo samplerInfo{};
+	samplerInfo.sampler = m_sampler;
+
+	VkWriteDescriptorSet samplerWrite{};
+	samplerWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	samplerWrite.dstSet = m_descriptorSet;
+	samplerWrite.dstBinding = 4;
+	samplerWrite.descriptorCount = 1;
+	samplerWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+	samplerWrite.pImageInfo = &samplerInfo;
+
+	VkWriteDescriptorSet allWrites[6]{};
+	memcpy(allWrites, bufferWrites, sizeof(bufferWrites));
+	allWrites[4] = textureWrite;
+	allWrites[5] = samplerWrite;
+
+	vkUpdateDescriptorSets(VulkanCore::GetDevice(), 6, allWrites, 0, nullptr);
 
 	Logger::Success("Created descriptor set");
 }
