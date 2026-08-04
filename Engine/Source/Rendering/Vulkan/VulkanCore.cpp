@@ -19,9 +19,9 @@
 #include "Rendering/Vulkan/RayTracing/AccelerationStructure.h"
 
 float yaw = -90.0f;
-float pitch = 0.0f;
+float pitch = -10.0f;
 	
-glm::vec3 cameraPos   = glm::vec3(0.0f, 1.0f, 0.0f);
+glm::vec3 cameraPos   = glm::vec3(0.0f, 1.3f, 2.5f);
 glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
 glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
 

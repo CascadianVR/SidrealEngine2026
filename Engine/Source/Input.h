@@ -23,8 +23,8 @@ public:
     static inline __readonly int mousePosY;
     static inline __readonly int mousePosXLast;
     static inline __readonly int mousePosYLast;
-    static inline __readonly int deltaMouseX = 0.0f;
-    static inline __readonly int deltaMouseY = 0.0f;
+    static inline __readonly int deltaMouseX = 0;
+    static inline __readonly int deltaMouseY = 0;
 private:
     static inline Window* m_window = nullptr;
     static inline SDL_Event event;

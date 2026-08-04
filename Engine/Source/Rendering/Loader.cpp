@@ -8,6 +8,7 @@
 
 #include "Logger.h"
 #include "json.hpp"
+#include "Primitives.h"
 
 using json = nlohmann::json;
 
@@ -48,6 +49,24 @@ void Loader::LoadScene(const std::string& fileName)
 		{
 			Logger::Warn("Skipping non-object sceneData entry: ", sceneObject.dump());
 			continue;
+		}
+		
+		// Model name
+		if (!sceneObject.contains("name") || !sceneObject["name"].is_string())
+		{
+			Logger::Warn("Skipping scene object without valid \"name\" field: ", sceneObject.dump());
+			continue;
+		}
+		const std::string modelName = sceneObject["name"].get<std::string>();
+
+		// Check for primitive
+		std::unordered_map<std::string, uint32_t>::iterator it = Primitives::string_map.find(modelName);
+		bool isPrimitive = false;
+		uint32_t primitiveIndex = 0;
+		if (it != Primitives::string_map.end())
+		{
+			isPrimitive = true;
+			primitiveIndex = it->second;
 		}
 
 		// Model path
@@ -92,8 +111,18 @@ void Loader::LoadScene(const std::string& fileName)
 		modelMatrix = glm::rotate(modelMatrix, glm::radians(modelRotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
 		modelMatrix = glm::scale(modelMatrix, modelScale);
 
-		Logger::Info("Loading model: ", modelPath);
-		LoadGLB(modelPath, modelMatrix);
+		Logger::Info("Loading model: ", modelName);
+		if (isPrimitive)
+		{
+			Model model;
+			model.instanceMatrices = { modelMatrix };
+			Primitives::GetPrimitive(primitiveIndex, model);
+			m_loadedModels.push_back(model);
+		}
+		else
+		{
+			LoadGLB(modelPath, modelMatrix);
+		}
 	}
 
 	//for (int i = 0; i < 5; i++)

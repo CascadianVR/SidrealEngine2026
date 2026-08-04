@@ -7,23 +7,36 @@ class AccelerationStructure
 {
 public:
     static void CreateBLASForMeshes();
+    static void CreateHLASForMeshes();
     
     struct BLAS
     {
         VkAccelerationStructureKHR handle = VK_NULL_HANDLE;
-
         VkBuffer buffer = VK_NULL_HANDLE;
         VmaAllocation allocation = VK_NULL_HANDLE;
-
         VkDeviceAddress deviceAddress = 0;
+        VkDeviceSize size = 0;
+    };
 
+    struct TLAS
+    {
+        VkAccelerationStructureKHR handle = VK_NULL_HANDLE;
+        VkBuffer buffer = VK_NULL_HANDLE;
+        VmaAllocation allocation = VK_NULL_HANDLE;
+        VkDeviceAddress deviceAddress = 0;
         VkDeviceSize size = 0;
     };
     
 private:
+    static inline std::vector<VkAccelerationStructureInstanceKHR> m_instanceData;
+    static inline VkBuffer m_instanceDataBuffer = VK_NULL_HANDLE;
+    static inline VmaAllocation m_instanceDataBufferAllocation = VK_NULL_HANDLE;
+    static inline VkDeviceAddress m_instanceDataBufferDeviceAddress;
+    
     static inline std::vector<VkAccelerationStructureGeometryKHR> m_geometries;
     static inline std::vector<uint32_t> m_primitiveCounts;
     static inline std::vector<BLAS> m_blas;
+    static inline TLAS m_tlas;
     
     static inline PFN_vkCreateAccelerationStructureKHR m_pfnCreateAccelerationStructureKHR;
     static inline PFN_vkGetAccelerationStructureDeviceAddressKHR m_pfnGetAccelerationStructureDeviceAddressKHR;
