@@ -17,7 +17,8 @@ void AccelerationStructure::CreateBLASForMeshes()
 
     const VkDeviceAddress vertexAddress = GPUResourceUploader::GetVertexAddress();
     const VkDeviceAddress indexAddress = GPUResourceUploader::GetIndexAddress();
-    
+    printf("BLAS vertex address: 0x%llX\n",
+    static_cast<unsigned long long>(vertexAddress));
     // Get
     uint32_t totalMeshCount = 0;
     for (const Model& model : models) for (const Mesh& mesh : model.meshes) totalMeshCount++;
@@ -26,6 +27,9 @@ void AccelerationStructure::CreateBLASForMeshes()
     m_geometries.reserve(totalMeshCount);
     m_primitiveCounts.reserve(totalMeshCount);
     m_blas.reserve(totalMeshCount);
+    printf("m_geometries size: %zu capacity: %zu\n",
+    m_geometries.size(),
+    m_geometries.capacity());
     for (const Model& model : models)
     {
         for (const Mesh& mesh : model.meshes)
@@ -33,11 +37,20 @@ void AccelerationStructure::CreateBLASForMeshes()
             // Create geometry
             VkAccelerationStructureGeometryTrianglesDataKHR triangles{};
             triangles.sType                    = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-            triangles.vertexData.deviceAddress = vertexAddress + mesh.vertexOffset * sizeof(Vertex);
+            triangles.pNext                    = nullptr;
+            printf("vertexAddress: 0x%llX\n",
+    static_cast<unsigned long long>(vertexAddress));
+
+            triangles.vertexData.deviceAddress =
+                vertexAddress + mesh.vertexOffset * sizeof(Vertex);
+
+            printf("triangles address: 0x%llX\n",
+                static_cast<unsigned long long>(triangles.vertexData.deviceAddress));
+            //triangles.vertexData.deviceAddress = vertexAddress + mesh.vertexOffset * sizeof(Vertex);
             triangles.indexData.deviceAddress  = indexAddress + mesh.indexOffset * sizeof(uint32_t);
             triangles.vertexFormat             = VK_FORMAT_R32G32B32_SFLOAT;
-            triangles.maxVertex                = mesh.vertexCount - 1;
             triangles.vertexStride             = sizeof(Vertex);
+            triangles.maxVertex                = mesh.vertexCount - 1;
             triangles.indexType                = VK_INDEX_TYPE_UINT32;
     
             VkAccelerationStructureGeometryKHR geometry{};
@@ -72,6 +85,7 @@ void AccelerationStructure::CreateBLASForMeshes()
             // Create BLAS
             BLAS blas{};
             blas.size = sizeInfo.accelerationStructureSize;
+            blas.scratchSize = sizeInfo.buildScratchSize;
             
             VkBufferCreateInfo bufferInfo{};
             bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -161,6 +175,41 @@ void AccelerationStructure::CreateBLASForMeshes()
 
     m_instanceDataBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
 
+    // Create combined BLAS scratch buffer
+    VkPhysicalDeviceAccelerationStructurePropertiesKHR accelProps{};
+    accelProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
+    VkPhysicalDeviceProperties2 props2{};
+    props2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    props2.pNext = &accelProps;
+    vkGetPhysicalDeviceProperties2(VulkanCore::GetPhysicalDevice(), &props2);
+    const VkDeviceSize scratchAlignment = accelProps.minAccelerationStructureScratchOffsetAlignment;
+    VkDeviceSize totalScratchSize = 0;
+    for (const BLAS& blas : m_blas)
+    {
+        totalScratchSize = (totalScratchSize + scratchAlignment - 1) & ~(scratchAlignment - 1);
+        totalScratchSize += blas.scratchSize;
+    }
+
+    VkBufferCreateInfo scratchBufferInfo{};
+    scratchBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    scratchBufferInfo.size = totalScratchSize;
+    scratchBufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+
+    VmaAllocationCreateInfo scratchAllocInfo{};
+    scratchAllocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+    scratchAllocInfo.flags = 0;
+
+    if (vmaCreateBuffer(VulkanCore::GetAllocator(), &scratchBufferInfo, &scratchAllocInfo, &m_blasScratchBuffer, &m_blasScratchBufferAllocation, nullptr) != VK_SUCCESS)
+    {
+        Logger::Error("Failed to create BLAS scratch buffer");
+    }
+
+    VkBufferDeviceAddressInfo scratchAddressInfo{};
+    scratchAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    scratchAddressInfo.buffer = m_blasScratchBuffer;
+
+    m_blasScratchBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &scratchAddressInfo);
+
     Logger::Success("Created BLAS instance data buffer!");
 }
 
@@ -199,6 +248,7 @@ void AccelerationStructure::CreateHLASForMeshes()
 
     // Create TLAS buffer
     m_tlas.size = sizeInfo.accelerationStructureSize;
+    m_tlas.scratchSize = sizeInfo.buildScratchSize;
 
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -234,5 +284,192 @@ void AccelerationStructure::CreateHLASForMeshes()
 
     m_tlas.deviceAddress = m_pfnGetAccelerationStructureDeviceAddressKHR(VulkanCore::GetDevice(), &addressInfo);
 
+    // Create TLAS scratch buffer
+    VkBufferCreateInfo scratchBufferInfo{};
+    scratchBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    scratchBufferInfo.size = m_tlas.scratchSize;
+    scratchBufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+
+    VmaAllocationCreateInfo scratchAllocInfo{};
+    scratchAllocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+    scratchAllocInfo.flags = 0;
+
+    if (vmaCreateBuffer(VulkanCore::GetAllocator(), &scratchBufferInfo, &scratchAllocInfo, &m_tlasScratchBuffer, &m_tlasScratchBufferAllocation, nullptr) != VK_SUCCESS)
+    {
+        Logger::Error("Failed to create TLAS scratch buffer");
+    }
+
+    VkBufferDeviceAddressInfo scratchAddressInfo{};
+    scratchAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    scratchAddressInfo.buffer = m_tlasScratchBuffer;
+
+    m_tlasScratchBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &scratchAddressInfo);
+
     Logger::Success("Created TLAS!");
+}
+
+void AccelerationStructure::BuildAccelerationStructures()
+{
+    VkCommandPool commandPool;
+    VkCommandBuffer commandBuffer;
+    
+    // Create temporary command buffer for uploading data
+    VkCommandPoolCreateInfo poolCreateInfo{};
+    poolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    poolCreateInfo.pNext = nullptr;
+    poolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    poolCreateInfo.queueFamilyIndex = VulkanCore::GetQueueFamilyIndex();
+
+    if (vkCreateCommandPool(VulkanCore::GetDevice(), &poolCreateInfo, nullptr, &commandPool) != VK_SUCCESS)
+    {
+        throw std::runtime_error("Failed to create command pool");
+    }
+
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = commandPool;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = 1;
+
+    if (vkAllocateCommandBuffers(VulkanCore::GetDevice(), &allocInfo, &commandBuffer) != VK_SUCCESS)
+    {
+        throw std::runtime_error("Failed to allocate command buffer");
+    }
+    
+    // Begin command buffer
+    VkCommandBufferBeginInfo commandBufferBeginInfo{};
+    commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    
+    if (vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo) != VK_SUCCESS)
+    {
+        Logger::Error("Failed to begin command buffer");
+    }
+    
+    // Get pointer to necessary funtion
+    m_pfnCmdBuildAccelerationStructuresKHR = reinterpret_cast<PFN_vkCmdBuildAccelerationStructuresKHR>(
+        vkGetDeviceProcAddr(VulkanCore::GetDevice(), "vkCmdBuildAccelerationStructuresKHR"));
+    
+    VkPhysicalDeviceAccelerationStructurePropertiesKHR accelProps{};
+    accelProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
+    
+    VkPhysicalDeviceProperties2 props2{};
+    props2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    props2.pNext = &accelProps;
+    
+    vkGetPhysicalDeviceProperties2(VulkanCore::GetPhysicalDevice(), &props2);
+    
+    const VkDeviceSize scratchAlignment = accelProps.minAccelerationStructureScratchOffsetAlignment;
+
+    // Build BLAS
+    std::vector<VkAccelerationStructureBuildGeometryInfoKHR> blasBuildInfos(m_blas.size());
+    std::vector<VkAccelerationStructureBuildRangeInfoKHR> blasBuildRangeInfos(m_blas.size());
+    std::vector<VkAccelerationStructureBuildRangeInfoKHR*> blasBuildRangeInfoPointers(m_blas.size());
+    std::vector<VkDeviceAddress> blasScratchOffsets(m_blas.size());
+
+    VkDeviceSize scratchOffset = 0;
+    for (size_t i = 0; i < m_blas.size(); i++)
+    {
+        scratchOffset = (scratchOffset + scratchAlignment - 1) & ~(scratchAlignment - 1);
+        blasScratchOffsets[i] = m_blasScratchBufferDeviceAddress + scratchOffset;
+        scratchOffset += m_blas[i].scratchSize;
+
+        blasBuildInfos[i].sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+        blasBuildInfos[i].type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+        blasBuildInfos[i].flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+        blasBuildInfos[i].srcAccelerationStructure = VK_NULL_HANDLE;
+        blasBuildInfos[i].dstAccelerationStructure = m_blas[i].handle;
+        blasBuildInfos[i].geometryCount = 1;
+        blasBuildInfos[i].pGeometries = &m_geometries[i];
+        blasBuildInfos[i].mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+        blasBuildInfos[i].scratchData.deviceAddress = blasScratchOffsets[i];
+
+        blasBuildRangeInfos[i].primitiveCount = m_primitiveCounts[i];
+        blasBuildRangeInfos[i].primitiveOffset = 0;
+
+        blasBuildRangeInfoPointers[i] = &blasBuildRangeInfos[i];
+    }
+
+    m_pfnCmdBuildAccelerationStructuresKHR(commandBuffer, static_cast<uint32_t>(blasBuildInfos.size()), blasBuildInfos.data(), blasBuildRangeInfoPointers.data());
+
+    // Barrier 1
+    VkMemoryBarrier2 blasToTlasBarrier{};
+    blasToTlasBarrier.sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
+    blasToTlasBarrier.srcStageMask  = VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR;
+    blasToTlasBarrier.srcAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
+    blasToTlasBarrier.dstStageMask  = VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR;
+    blasToTlasBarrier.dstAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR;
+
+    VkDependencyInfo dependencyInfo{};
+    dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dependencyInfo.memoryBarrierCount = 1;
+    dependencyInfo.pMemoryBarriers = &blasToTlasBarrier;
+
+    vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+    
+    // Build TLAS
+    VkAccelerationStructureGeometryInstancesDataKHR instancesData{};
+    instancesData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+    instancesData.data.deviceAddress = m_instanceDataBufferDeviceAddress;
+
+    VkAccelerationStructureGeometryKHR tlasGeometry{};
+    tlasGeometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+    tlasGeometry.flags = 0;
+    tlasGeometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+    tlasGeometry.geometry.instances = instancesData;
+
+    VkAccelerationStructureBuildGeometryInfoKHR tlasBuildInfo{};
+    tlasBuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+    tlasBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+    tlasBuildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+    tlasBuildInfo.srcAccelerationStructure = VK_NULL_HANDLE;
+    tlasBuildInfo.dstAccelerationStructure = m_tlas.handle;
+    tlasBuildInfo.geometryCount = 1;
+    tlasBuildInfo.pGeometries = &tlasGeometry;
+    tlasBuildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+    tlasBuildInfo.scratchData.deviceAddress = m_tlasScratchBufferDeviceAddress;
+
+    VkAccelerationStructureBuildRangeInfoKHR tlasBuildRangeInfo{};
+    tlasBuildRangeInfo.primitiveCount = static_cast<uint32_t>(m_instanceData.size());
+    tlasBuildRangeInfo.primitiveOffset = 0;
+
+    VkAccelerationStructureBuildRangeInfoKHR* tlasBuildRangeInfoPointer = &tlasBuildRangeInfo;
+
+    m_pfnCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &tlasBuildInfo, &tlasBuildRangeInfoPointer);
+
+    // Create pipeline memory barrier
+    VkMemoryBarrier2 tlasToRayTracingBarrier{};
+    tlasToRayTracingBarrier.sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
+    tlasToRayTracingBarrier.srcStageMask  = VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR;
+    tlasToRayTracingBarrier.srcAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
+    tlasToRayTracingBarrier.dstStageMask  = VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR;
+    tlasToRayTracingBarrier.dstAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR;
+
+    VkDependencyInfo dependencyInfo2{};
+    dependencyInfo2.sType                    = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dependencyInfo2.memoryBarrierCount       = 1;
+    dependencyInfo2.pMemoryBarriers          = &tlasToRayTracingBarrier;
+
+    vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo2);
+    
+    // End command buffer
+    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
+    {
+        Logger::Error("Failed to end command buffer");   
+    }
+    
+    // Submit command buffer
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+
+    if (vkQueueSubmit(VulkanCore::GetQueue(), 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS)
+    {
+        Logger::Error("Failed to submit command buffer");  
+    }
+
+    vkQueueWaitIdle(VulkanCore::GetQueue());
+
+    Logger::Success("Acceleration structures built!");
 }

@@ -18,8 +18,8 @@ public:
 	static constexpr int MAX_TEXTURES = 128;
 
 private:
-	static void CreateVertexBuffer(const std::vector<Model>& models);
-	static void CreateIndexBuffer(const std::vector<Model>& models);
+	static void CreateVertexBuffer(std::vector<Model>& models);
+	static void CreateIndexBuffer(std::vector<Model>& models);
 	static void CreateRenderDataBuffer(const std::vector<Model>& models);
 	static void CreateInstanceDataBuffer(const std::vector<Model>& models);
 	static void CreateTextureDataBuffer(const std::vector<Texture>& textures);

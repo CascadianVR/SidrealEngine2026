@@ -38,7 +38,10 @@ void VulkanCore::Initialize(const Window* window)
 	CreateCommandBuffers();
 
 	GPUResourceUploader::CreateDataBuffers(); // Create before pipeline
+	
 	AccelerationStructure::CreateBLASForMeshes();
+	AccelerationStructure::CreateHLASForMeshes();
+	AccelerationStructure::BuildAccelerationStructures();
 	
 	PipelineManager::Initialize(m_logicalDevice.GetLogicalDevice());
 	PipelineManager::CreatePipeline("Resources/Shaders/shader2.slang", m_swapChain.GetDepthFormat());
@@ -479,28 +482,6 @@ void VulkanCore::CreateCommandBuffers()
 	Logger::Success("Command buffers created successfully!");
 }
 
-void VulkanCore::DestroyDescriptorResources()
-{
-	const VkDevice device = m_logicalDevice.GetLogicalDevice();
-	if (m_descriptorPool != VK_NULL_HANDLE) {
-		vkDestroyDescriptorPool(device, m_descriptorPool, nullptr);
-		m_descriptorPool = VK_NULL_HANDLE;
-	}
-	if (m_defaultTextureImageView != VK_NULL_HANDLE) {
-		vkDestroyImageView(device, m_defaultTextureImageView, nullptr);
-		m_defaultTextureImageView = VK_NULL_HANDLE;
-	}
-	if (m_defaultTextureImage != VK_NULL_HANDLE) {
-		vmaDestroyImage(m_allocator, m_defaultTextureImage, m_defaultTextureAllocation);
-		m_defaultTextureImage = VK_NULL_HANDLE;
-		m_defaultTextureAllocation = VK_NULL_HANDLE;
-	}
-	if (m_defaultSampler != VK_NULL_HANDLE) {
-		vkDestroySampler(device, m_defaultSampler, nullptr);
-		m_defaultSampler = VK_NULL_HANDLE;
-	}
-}
-
 void VulkanCore::SetupDeviceQueueAndSemaphores()
 {
 	vkGetDeviceQueue(m_logicalDevice.GetLogicalDevice(), m_physicalDevice.GetGraphicsQueueFamilyIndex(), 0, &m_queue);
@@ -640,9 +621,6 @@ void VulkanCore::Shutdown()
 
 	// Cleanup swapchain related resources
 	CleanupSwapChain();
-
-	// Destroy descriptor resources (textures, samplers, pools)
-	DestroyDescriptorResources();
 
 	// Shutdown shader resources
 	PipelineManager::Shutdown();

@@ -17,6 +17,7 @@ public:
 	static void Render();
 	static VmaAllocator GetAllocator() { return m_allocator; }
 	
+	static VkPhysicalDevice GetPhysicalDevice() { return m_physicalDevice.GetPhysicalDevice(); }
 	static VkDevice GetDevice() { return m_logicalDevice.GetLogicalDevice(); }
 	static uint32_t GetQueueFamilyIndex() { return m_physicalDevice.GetGraphicsQueueFamilyIndex(); }
 	static VkQueue GetQueue() { return m_queue; }
@@ -43,20 +44,11 @@ private:
 	static inline std::vector<FrameResource> m_frameResources;
 	static inline VkSemaphore m_timelineSemaphore;
 	static inline uint32_t m_apiVersion;
-
-	// Descriptor and texture resources for the default texture used by shaders
-	static inline VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
-	static inline VkDescriptorSet m_descriptorSetTex = VK_NULL_HANDLE;
-	static inline VkSampler m_defaultSampler = VK_NULL_HANDLE;
-	static inline VkImage m_defaultTextureImage = VK_NULL_HANDLE;
-	static inline VmaAllocation m_defaultTextureAllocation = VK_NULL_HANDLE;
-	static inline VkImageView m_defaultTextureImageView = VK_NULL_HANDLE;
-
+	
 	static void CreateInstance();
 	static void CreateDebugCallback();
 	static void CreateSurface(const Window* window);
 	static void CreateMemoryAllocator();
-	static void DestroyDescriptorResources();
 	static void Shutdown();
 	static void SetupDeviceQueueAndSemaphores();
 	static void CreateCommandBuffers();

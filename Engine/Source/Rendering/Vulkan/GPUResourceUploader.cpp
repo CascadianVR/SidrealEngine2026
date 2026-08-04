@@ -8,7 +8,7 @@
 
 void GPUResourceUploader::CreateDataBuffers()
 {
-	const std::vector<Model>& models = Loader::GetLoadedModels();
+	std::vector<Model>& models = Loader::GetLoadedModels();
 	const std::vector<Texture>& textures = Loader::GetLoadedTextures();
 	
 	CreateVertexBuffer(models);
@@ -20,7 +20,7 @@ void GPUResourceUploader::CreateDataBuffers()
 	CreateDescriptorSet();
 }
 
-void GPUResourceUploader::CreateVertexBuffer(const std::vector<Model>& models) {
+void GPUResourceUploader::CreateVertexBuffer(std::vector<Model>& models) {
 	size_t totalVertexCount = 0;
 	for (const auto& model : models)
 	{
@@ -35,11 +35,12 @@ void GPUResourceUploader::CreateVertexBuffer(const std::vector<Model>& models) {
 
 	// Copy vertices and compute offsets per mesh
 	size_t vertexOffset = 0;
-	for (const auto& model : models)
+	for (auto& model : models)
 	{
-		for (const auto& mesh : model.meshes)
+		for (auto& mesh : model.meshes)
 		{
 			vertices.insert(vertices.end(), mesh.vertices.begin(), mesh.vertices.end());
+			mesh.vertexOffset = static_cast<uint32_t>(vertexOffset);
 			vertexOffset += mesh.vertexCount;
 		}
 	}
@@ -48,7 +49,9 @@ void GPUResourceUploader::CreateVertexBuffer(const std::vector<Model>& models) {
 	VkBufferCreateInfo bufferCreateInfo {};
 	bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	bufferCreateInfo.size = vertexBufferSize;
-	bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+	bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT 
+		| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+		| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
 
 	VmaAllocationCreateInfo bufferAllocationCreateInfo {};
 	bufferAllocationCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
@@ -72,11 +75,11 @@ void GPUResourceUploader::CreateVertexBuffer(const std::vector<Model>& models) {
 	addressInfo.buffer = m_vertexBuffer;
 
 	m_vertexBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
-
+	
 	Logger::Success("Created vertex buffer");
 }
 
-void GPUResourceUploader::CreateIndexBuffer(const std::vector<Model>& models) {
+void GPUResourceUploader::CreateIndexBuffer(std::vector<Model>& models) {
 	size_t totalIndexCount = 0;
 	for (const auto& model : models)
 	{
@@ -89,11 +92,14 @@ void GPUResourceUploader::CreateIndexBuffer(const std::vector<Model>& models) {
 	std::vector<uint32_t> indices;
 	indices.reserve(totalIndexCount);
 
-	for (const auto& model : models)
+	uint32_t indexOffset = 0;
+	for (auto& model : models)
 	{
-		for (const auto& mesh : model.meshes)
+		for (auto& mesh : model.meshes)
 		{
 			indices.insert(indices.end(), mesh.indices.begin(), mesh.indices.end());
+			mesh.indexOffset = indexOffset;
+			indexOffset += mesh.indexCount;
 		}
 	}
 
@@ -101,7 +107,9 @@ void GPUResourceUploader::CreateIndexBuffer(const std::vector<Model>& models) {
 	VkBufferCreateInfo bufferCreateInfo {};
 	bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	bufferCreateInfo.size = indexBufferSize;
-	bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+	bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT 
+		| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+		| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
 
 	VmaAllocationCreateInfo bufferAllocationCreateInfo {};
 	bufferAllocationCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
@@ -125,7 +133,7 @@ void GPUResourceUploader::CreateIndexBuffer(const std::vector<Model>& models) {
 	addressInfo.buffer = m_indexBuffer;
 
 	m_indexBufferDeviceAddress = vkGetBufferDeviceAddress(VulkanCore::GetDevice(), &addressInfo);
-
+	
 	Logger::Success("Created index buffer");
 }
 
