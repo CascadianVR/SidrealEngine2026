@@ -6,10 +6,6 @@
 class AccelerationStructure
 {
 public:
-    static void CreateBLASForMeshes();
-    static void CreateHLASForMeshes();
-    static void BuildAccelerationStructures();
-    
     struct BLAS
     {
         VkAccelerationStructureKHR handle = VK_NULL_HANDLE;
@@ -29,6 +25,12 @@ public:
         VkDeviceSize size = 0;
         VkDeviceSize scratchSize = 0;
     };
+    
+    static void CreateBLASForMeshes();
+    static void CreateHLASForMeshes();
+    static void BuildAccelerationStructures();
+    
+    static VkAccelerationStructureKHR* GetTLAS() { return &m_tlas.handle; }
     
 private:
     static inline std::vector<VkAccelerationStructureInstanceKHR> m_instanceData;

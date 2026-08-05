@@ -4,6 +4,7 @@
 
 #include "Rendering/Vulkan/VulkanCore.h"
 #include "Logger.h"
+#include "RayTracing/AccelerationStructure.h"
 #include "Rendering/Loader.h"
 
 void GPUResourceUploader::CreateDataBuffers()
@@ -444,7 +445,7 @@ void GPUResourceUploader::CreateDescriptorSet()
 	m_bindings.push_back({ .binding = INSTANCE_DATA_BINDING, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_VERTEX_BIT });
 	
 	// Acceleration Structure Data
-	m_bindings.push_back({ .binding = ACCELERATION_STRUCTURE_BINDING, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_VERTEX_BIT });
+	m_bindings.push_back({ .binding = ACCELERATION_STRUCTURE_BINDING, .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT });
 
 	// Sampler Data
 	m_bindings.push_back({ .binding = SAMPLER_BINDING, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT });
@@ -481,6 +482,10 @@ void GPUResourceUploader::CreateDescriptorSet()
 		{
 			.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.descriptorCount = BINDING_COUNT - 2 // Minus sampler and texture bindings
+		},		
+		{
+			.type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+			.descriptorCount = 1 // Minus sampler and texture bindings
 		},
 		{
 			.type = VK_DESCRIPTOR_TYPE_SAMPLER,
@@ -496,7 +501,7 @@ void GPUResourceUploader::CreateDescriptorSet()
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	poolInfo.poolSizeCount = std::size(poolSizes);
 	poolInfo.pPoolSizes = poolSizes;
-	poolInfo.maxSets = 1;
+	poolInfo.maxSets = 1; // TODO: Maybe should be more? MAX_FRAMES_IN_FLIGHT + 1?
 	poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
 
 	if (vkCreateDescriptorPool(VulkanCore::GetDevice(), &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS)
@@ -524,7 +529,7 @@ void GPUResourceUploader::CreateDescriptorSet()
 		return;
 	}
 
-	VkDescriptorBufferInfo bufferInfos[BINDING_COUNT - 2]{}; // Minus sampler and texture binding
+	VkDescriptorBufferInfo bufferInfos[4]{}; // Minus sampler and texture binding
 	bufferInfos[VERTEX_BINDING].buffer = m_vertexBuffer;
 	bufferInfos[VERTEX_BINDING].range = VK_WHOLE_SIZE;
 	bufferInfos[INDEX_BINDING].buffer = m_indexBuffer;
@@ -533,11 +538,10 @@ void GPUResourceUploader::CreateDescriptorSet()
 	bufferInfos[RENDER_DATA_BINDING].range = VK_WHOLE_SIZE;
 	bufferInfos[INSTANCE_DATA_BINDING].buffer = m_instanceDataBuffer;
 	bufferInfos[INSTANCE_DATA_BINDING].range = VK_WHOLE_SIZE;	
-	bufferInfos[ACCELERATION_STRUCTURE_BINDING].buffer = m_instanceDataBuffer; // TODO: GET THIS
-	bufferInfos[ACCELERATION_STRUCTURE_BINDING].range = VK_WHOLE_SIZE;
 
+	// Vertex, index, render data and instacne data
 	VkWriteDescriptorSet bufferWrites[BINDING_COUNT]{};
-	for (int i = 0; i < BINDING_COUNT - 2; i++)
+	for (int i = 0; i < 4; i++) // Minus accel struct, sampler and texture binding
 	{
 		bufferWrites[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		bufferWrites[i].dstSet = m_descriptorSet;
@@ -546,6 +550,21 @@ void GPUResourceUploader::CreateDescriptorSet()
 		bufferWrites[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		bufferWrites[i].pBufferInfo = &bufferInfos[i];
 	}
+	
+	// Acceleration structure
+	VkWriteDescriptorSetAccelerationStructureKHR accelWrite{};
+	accelWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+	accelWrite.accelerationStructureCount = 1;
+	accelWrite.pAccelerationStructures = AccelerationStructure::GetTLAS();
+	
+	VkWriteDescriptorSet accelerationStructureWrite{};
+	accelerationStructureWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	accelerationStructureWrite.dstSet = m_descriptorSet;
+	accelerationStructureWrite.dstBinding = ACCELERATION_STRUCTURE_BINDING;
+	accelerationStructureWrite.descriptorCount = 1;
+	accelerationStructureWrite.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+	accelerationStructureWrite.pNext = &accelWrite;
+	bufferWrites[ACCELERATION_STRUCTURE_BINDING] = accelerationStructureWrite;
 	
 	// Sampler
 	VkDescriptorImageInfo samplerInfo{};

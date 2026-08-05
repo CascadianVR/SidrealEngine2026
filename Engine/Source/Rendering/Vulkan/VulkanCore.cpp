@@ -37,10 +37,11 @@ void VulkanCore::Initialize(const Window* window)
 	SetupDeviceQueueAndSemaphores();
 	CreateCommandBuffers();
 
-	GPUResourceUploader::CreateDataBuffers(); // Create before pipeline
 	
 	AccelerationStructure::CreateBLASForMeshes();
 	AccelerationStructure::CreateHLASForMeshes();
+	GPUResourceUploader::CreateDataBuffers(); // Create before pipeline
+	
 	//AccelerationStructure::BuildAccelerationStructures();
 	
 	PipelineManager::Initialize(m_logicalDevice.GetLogicalDevice());
