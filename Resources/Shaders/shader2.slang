@@ -35,10 +35,10 @@ StructuredBuffer<Vertex> g_Vertices;
 StructuredBuffer<uint32_t> g_Indices;
 
 [[vk::binding(2, 0)]]
-StructuredBuffer<InstanceData> g_Instances;
+StructuredBuffer<RenderData> g_RenderDatas;
 
 [[vk::binding(3, 0)]]
-StructuredBuffer<RenderData> g_RenderDatas;
+StructuredBuffer<InstanceData> g_Instances;
 
 [[vk::binding(4, 0)]]
 SamplerState g_Sampler;
