@@ -432,25 +432,28 @@ void GPUResourceUploader::CreateDescriptorSet()
 	m_bindings.clear();
 	
 	// Vertices
-	m_bindings.push_back({ .binding = 0, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_VERTEX_BIT });
+	m_bindings.push_back({ .binding = VERTEX_BINDING, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_VERTEX_BIT });
 	
 	// Indices
-	m_bindings.push_back({ .binding = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_VERTEX_BIT });
+	m_bindings.push_back({ .binding = INDEX_BINDING, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_VERTEX_BIT });
  
 	// Render Data
-	m_bindings.push_back({ .binding = 2, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_VERTEX_BIT });
+	m_bindings.push_back({ .binding = RENDER_DATA_BINDING, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_VERTEX_BIT });
 
 	// Instance Data
-	m_bindings.push_back({ .binding = 3, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_VERTEX_BIT });
+	m_bindings.push_back({ .binding = INSTANCE_DATA_BINDING, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_VERTEX_BIT });
+	
+	// Acceleration Structure Data
+	m_bindings.push_back({ .binding = ACCELERATION_STRUCTURE_BINDING, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_VERTEX_BIT });
 
 	// Sampler Data
-	m_bindings.push_back({ .binding = 4, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT });
+	m_bindings.push_back({ .binding = SAMPLER_BINDING, .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT });
 
 	// Texture Data
-	m_bindings.push_back({.binding = 5, .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = MAX_TEXTURES, .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT });
+	m_bindings.push_back({.binding = TEXTURE_BINDING, .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = MAX_TEXTURES, .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT });
 
 	// WARNING FRAGILE
-	m_bindingFlags[5] =
+	m_bindingFlags[TEXTURE_BINDING] =
 	  VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
 	| VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
 	| VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
@@ -477,7 +480,7 @@ void GPUResourceUploader::CreateDescriptorSet()
 	{
 		{
 			.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.descriptorCount = 4
+			.descriptorCount = BINDING_COUNT - 2 // Minus sampler and texture bindings
 		},
 		{
 			.type = VK_DESCRIPTOR_TYPE_SAMPLER,
@@ -521,18 +524,20 @@ void GPUResourceUploader::CreateDescriptorSet()
 		return;
 	}
 
-	VkDescriptorBufferInfo bufferInfos[4]{};
-	bufferInfos[0].buffer = m_vertexBuffer;
-	bufferInfos[0].range = VK_WHOLE_SIZE;
-	bufferInfos[1].buffer = m_indexBuffer;
-	bufferInfos[1].range = VK_WHOLE_SIZE;
-	bufferInfos[2].buffer = m_renderDataBuffer;
-	bufferInfos[2].range = VK_WHOLE_SIZE;
-	bufferInfos[3].buffer = m_instanceDataBuffer;
-	bufferInfos[3].range = VK_WHOLE_SIZE;
+	VkDescriptorBufferInfo bufferInfos[BINDING_COUNT - 2]{}; // Minus sampler and texture binding
+	bufferInfos[VERTEX_BINDING].buffer = m_vertexBuffer;
+	bufferInfos[VERTEX_BINDING].range = VK_WHOLE_SIZE;
+	bufferInfos[INDEX_BINDING].buffer = m_indexBuffer;
+	bufferInfos[INDEX_BINDING].range = VK_WHOLE_SIZE;
+	bufferInfos[RENDER_DATA_BINDING].buffer = m_renderDataBuffer;
+	bufferInfos[RENDER_DATA_BINDING].range = VK_WHOLE_SIZE;
+	bufferInfos[INSTANCE_DATA_BINDING].buffer = m_instanceDataBuffer;
+	bufferInfos[INSTANCE_DATA_BINDING].range = VK_WHOLE_SIZE;	
+	bufferInfos[ACCELERATION_STRUCTURE_BINDING].buffer = m_instanceDataBuffer; // TODO: GET THIS
+	bufferInfos[ACCELERATION_STRUCTURE_BINDING].range = VK_WHOLE_SIZE;
 
-	VkWriteDescriptorSet bufferWrites[6]{};
-	for (int i = 0; i < 4; i++)
+	VkWriteDescriptorSet bufferWrites[BINDING_COUNT]{};
+	for (int i = 0; i < BINDING_COUNT - 2; i++)
 	{
 		bufferWrites[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		bufferWrites[i].dstSet = m_descriptorSet;
@@ -548,11 +553,11 @@ void GPUResourceUploader::CreateDescriptorSet()
 	VkWriteDescriptorSet samplerWrite{};
 	samplerWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	samplerWrite.dstSet = m_descriptorSet;
-	samplerWrite.dstBinding = 4;
+	samplerWrite.dstBinding = SAMPLER_BINDING;
 	samplerWrite.descriptorCount = 1;
 	samplerWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
 	samplerWrite.pImageInfo = &samplerInfo;
-	bufferWrites[4] = samplerWrite;
+	bufferWrites[SAMPLER_BINDING] = samplerWrite;
 
 	// Texture (MUST BE LAST SINCE IT'S VARIABLE)
 	std::vector<VkDescriptorImageInfo> imageInfos(m_textureImageViews.size());
@@ -566,14 +571,13 @@ void GPUResourceUploader::CreateDescriptorSet()
 	VkWriteDescriptorSet textureWrite{};
 	textureWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	textureWrite.dstSet = m_descriptorSet;
-	textureWrite.dstBinding = 5;
+	textureWrite.dstBinding = TEXTURE_BINDING;
 	textureWrite.descriptorCount = static_cast<uint32_t>(imageInfos.size());
 	textureWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	textureWrite.pImageInfo = imageInfos.data();
-	bufferWrites[5] = textureWrite;
-	
+	bufferWrites[TEXTURE_BINDING] = textureWrite;
 
-	vkUpdateDescriptorSets(VulkanCore::GetDevice(), 6, bufferWrites, 0, nullptr);
+	vkUpdateDescriptorSets(VulkanCore::GetDevice(), BINDING_COUNT, bufferWrites, 0, nullptr);
 
 	Logger::Success("Created descriptor set");
 }

@@ -40,10 +40,10 @@ StructuredBuffer<RenderData> g_RenderDatas;
 [[vk::binding(3, 0)]]
 StructuredBuffer<InstanceData> g_Instances;
 
-[[vk::binding(4, 0)]]
+[[vk::binding(5, 0)]]
 SamplerState g_Sampler;
 
-[[vk::binding(5, 0)]]
+[[vk::binding(6, 0)]]
 Texture2D<float4> g_Textures[128];
 
 struct VSOutput

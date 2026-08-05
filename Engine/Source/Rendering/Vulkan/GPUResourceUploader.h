@@ -15,7 +15,18 @@ public:
 	static VkDescriptorSet* GetDescriptorSet() { return &m_descriptorSet; }
 	static VkDeviceAddress GetVertexAddress() { return m_vertexBufferDeviceAddress; }
 	static VkDeviceAddress GetIndexAddress() { return m_indexBufferDeviceAddress; }
+	
 	static constexpr int MAX_TEXTURES = 128;
+	
+	// Descriptor set bindings
+	static constexpr int BINDING_COUNT = 7;
+	static constexpr int VERTEX_BINDING = 0;
+	static constexpr int INDEX_BINDING = 1;
+	static constexpr int RENDER_DATA_BINDING = 2;
+	static constexpr int INSTANCE_DATA_BINDING = 3;
+	static constexpr int ACCELERATION_STRUCTURE_BINDING = 4;
+	static constexpr int SAMPLER_BINDING = 5;
+	static constexpr int TEXTURE_BINDING = 6;
 
 private:
 	static void CreateVertexBuffer(std::vector<Model>& models);
@@ -31,7 +42,7 @@ private:
 
 	// Vulkan Stuffs
 	static inline std::vector<VkDescriptorSetLayoutBinding> m_bindings;
-	static inline std::array<VkDescriptorBindingFlags, 6> m_bindingFlags{};
+	static inline std::array<VkDescriptorBindingFlags, BINDING_COUNT> m_bindingFlags{};
 	static inline VkDescriptorSetLayout m_descriptorSetLayout = VK_NULL_HANDLE;
 	static inline VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
 	static inline VkDescriptorSet m_descriptorSet = VK_NULL_HANDLE;
