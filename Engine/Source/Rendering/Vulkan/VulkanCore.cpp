@@ -41,7 +41,7 @@ void VulkanCore::Initialize(const Window* window)
 	
 	AccelerationStructure::CreateBLASForMeshes();
 	AccelerationStructure::CreateHLASForMeshes();
-	AccelerationStructure::BuildAccelerationStructures();
+	//AccelerationStructure::BuildAccelerationStructures();
 	
 	PipelineManager::Initialize(m_logicalDevice.GetLogicalDevice());
 	PipelineManager::CreatePipeline("Resources/Shaders/shader2.slang", m_swapChain.GetDepthFormat());
@@ -87,7 +87,8 @@ void VulkanCore::Render()
 		m_requireSwapchainRecreate = true;
 		return;
 	}
-	else if (result == VK_SUBOPTIMAL_KHR)
+	
+	if (result == VK_SUBOPTIMAL_KHR)
 	{
 		m_requireSwapchainRecreate = true;
 	}
@@ -176,8 +177,10 @@ void VulkanCore::Render()
 	Pipeline& pipeline = PipelineManager::GetPipeline("Resources/Shaders/shader2.slang");
 	
 	// Camera look
-	yaw += static_cast<float>(Input::deltaMouseX) * 0.1f;
-	pitch += -static_cast<float>(Input::deltaMouseY) * 0.1f;
+	float dt = Application::GetDeltaTime();
+	yaw += static_cast<float>(Input::deltaMouseX) * 0.1f * dt * 60.0f;
+	pitch += -static_cast<float>(Input::deltaMouseY) * 0.1f * dt * 60.0f;
+	
 	glm::vec3 front;
 	front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
 	front.y = sin(glm::radians(pitch));

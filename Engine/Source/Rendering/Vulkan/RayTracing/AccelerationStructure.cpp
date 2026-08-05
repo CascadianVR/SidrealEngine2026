@@ -38,15 +38,7 @@ void AccelerationStructure::CreateBLASForMeshes()
             VkAccelerationStructureGeometryTrianglesDataKHR triangles{};
             triangles.sType                    = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
             triangles.pNext                    = nullptr;
-            printf("vertexAddress: 0x%llX\n",
-    static_cast<unsigned long long>(vertexAddress));
-
-            triangles.vertexData.deviceAddress =
-                vertexAddress + mesh.vertexOffset * sizeof(Vertex);
-
-            printf("triangles address: 0x%llX\n",
-                static_cast<unsigned long long>(triangles.vertexData.deviceAddress));
-            //triangles.vertexData.deviceAddress = vertexAddress + mesh.vertexOffset * sizeof(Vertex);
+            triangles.vertexData.deviceAddress = vertexAddress + mesh.vertexOffset * sizeof(Vertex);
             triangles.indexData.deviceAddress  = indexAddress + mesh.indexOffset * sizeof(uint32_t);
             triangles.vertexFormat             = VK_FORMAT_R32G32B32_SFLOAT;
             triangles.vertexStride             = sizeof(Vertex);
