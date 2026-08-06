@@ -31,7 +31,7 @@ void VulkanCore::Initialize(const Window* window)
 	CreateInstance();
 	CreateDebugCallback();
 	CreateSurface(window);
-	m_physicalDevice = PhysicalDevice(m_instance);
+	m_physicalDevice = PhysicalDevice(m_instance, m_surface);
 	m_logicalDevice = LogicalDevice(m_physicalDevice);
 	CreateMemoryAllocator(); // Need instance and both devices to create allocator
 	m_swapChain = Swapchain(m_surface, m_physicalDevice, m_logicalDevice, m_allocator, window->GetWidth(), window->GetHeight());
@@ -453,14 +453,14 @@ void VulkanCore::CreateSurface(const Window* window)
 	}
 	Logger::Info("Creating surface with instance: ", m_instance);
 
+	// Create a Vulkan surface for the SDL window
 	const SDL_bool success = SDL_Vulkan_CreateSurface(window->GetSDLWindow(), m_instance, &m_surface);
 
-	// Create a Vulkan surface for the SDL window
 	if (!success)
 	{
 		throw std::runtime_error("Failed to create window surface");
 	}
-
+	
 	Logger::Success("Vulkan surface created successfully!");
 }
 

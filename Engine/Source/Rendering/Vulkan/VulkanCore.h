@@ -23,6 +23,7 @@ public:
 	static VkQueue GetQueue() { return m_queue; }
 	
 	static constexpr uint32_t MaxFramesInFlight = 2;
+	static constexpr uint32_t MinSwapChainImages = 3; // Triple buffering
 	static constexpr int MAX_TEXTURES = 128;
 private:
 

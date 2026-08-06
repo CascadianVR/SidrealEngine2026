@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 #include "Logger.h"
+#include "VulkanCore.h"
 
 Swapchain::Swapchain(VkSurfaceKHR& surface, PhysicalDevice& physicalDevice, LogicalDevice& logicalDevice, VmaAllocator& allocator, unsigned int width, unsigned int height)
 {
@@ -16,7 +17,7 @@ Swapchain::Swapchain(VkSurfaceKHR& surface, PhysicalDevice& physicalDevice, Logi
 	swapChainCreateInfo.pNext = nullptr;
 	swapChainCreateInfo.flags = 0;
 	swapChainCreateInfo.surface = surface;
-	swapChainCreateInfo.minImageCount = 3; // Triple buffering
+	swapChainCreateInfo.minImageCount = VulkanCore::MinSwapChainImages;
 	swapChainCreateInfo.imageFormat = VK_FORMAT_B8G8R8A8_SRGB;
 	swapChainCreateInfo.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
 	swapChainCreateInfo.imageExtent = { width, height };

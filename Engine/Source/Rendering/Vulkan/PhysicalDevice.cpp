@@ -3,7 +3,9 @@
 #include <utility>
 #include <vector>
 
-PhysicalDevice::PhysicalDevice(const VkInstance& instance)
+#include "VulkanCore.h"
+
+PhysicalDevice::PhysicalDevice(const VkInstance& instance, const VkSurfaceKHR vulkanSurface)
 {
 	// Pick the first available physical device
 	uint32_t deviceCount = 0;
@@ -15,6 +17,39 @@ PhysicalDevice::PhysicalDevice(const VkInstance& instance)
 	std::vector<VkPhysicalDevice> devices(deviceCount);
 	vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 	m_physicalDevice = devices[0]; // Just pick the first one for simplicity
+	
+	// Check surface capabilities
+	VkSurfaceCapabilitiesKHR capabilities;
+	const VkResult capResult = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physicalDevice, vulkanSurface, &capabilities);
+	if (capResult != VK_SUCCESS) {
+		Logger::Error("Failed to get physical device surface capabilities");
+		throw std::runtime_error("Failed to get physical device surface capabilities");
+	}
+	if (capabilities.minImageCount > VulkanCore::MinSwapChainImages)
+	{
+		Logger::Error("Surface does not support at least ", VulkanCore::MinSwapChainImages, " images! It supports at least ", capabilities.minImageCount);
+	}
+	
+	// Get surface formats
+	uint32_t formatCount = 0;
+	VkResult result = vkGetPhysicalDeviceSurfaceFormatsKHR(m_physicalDevice, vulkanSurface, &formatCount, nullptr);
+
+	if (result != VK_SUCCESS) {
+		Logger::Error("Failed to get surface formats!");
+	}
+
+	if (formatCount == 0) {
+		Logger::Error("No surface formats found!");
+	}
+
+	std::vector<VkSurfaceFormatKHR> surfaceFormats(formatCount);
+	result = vkGetPhysicalDeviceSurfaceFormatsKHR(m_physicalDevice, vulkanSurface, &formatCount, surfaceFormats.data());
+
+	if (result != VK_SUCCESS) {
+		Logger::Error("Failed to get surface formats!");
+	}
+	
+	
 	// Display selected physical device properties
 	VkPhysicalDeviceProperties deviceProperties;
 	vkGetPhysicalDeviceProperties(m_physicalDevice, &deviceProperties);

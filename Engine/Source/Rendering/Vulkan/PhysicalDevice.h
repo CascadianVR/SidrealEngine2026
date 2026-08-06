@@ -6,7 +6,7 @@
 class PhysicalDevice {
 public:
 	PhysicalDevice() = default;
-	PhysicalDevice(const VkInstance& instance);
+	PhysicalDevice(const VkInstance& instance, const VkSurfaceKHR vulkanSurface);
 	~PhysicalDevice() {};
 
 	VkPhysicalDevice& GetPhysicalDevice() { return m_physicalDevice; }
