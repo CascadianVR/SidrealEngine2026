@@ -4,6 +4,7 @@
 #include <Logger.h>
 #include <ranges>
 #include <filesystem>
+#include <fstream>
 namespace fs = std::filesystem;
 
 #include "Rendering/RendererTypes.h"
@@ -79,11 +80,21 @@ void PipelineManager::Shutdown()
 	m_pipelines.clear();
 }
 
-void PipelineManager::CreatePipeline(const std::string& fileName, VkFormat depthFormat)
+void PipelineManager::CreatePipeline(const std::string& filePath, VkFormat depthFormat)
 {
-	Pipeline pipelineObject{ fileName };
+	Pipeline pipelineObject{ filePath };
 
 	Slang::ComPtr<slang::ISession> slangSession;
+
+	// THIS IS FUCKED >.>
+	std::filesystem::path fullPath(filePath);
+	std::filesystem::path dirPath = fullPath.parent_path();
+	std::filesystem::path fileName = fullPath.stem();
+	std::string dirPathStr = dirPath.string();
+	const char* searchPathsArray[] = { dirPathStr.c_str() };
+	m_slangSessionDesc.searchPaths = searchPathsArray;
+	m_slangSessionDesc.searchPathCount = 1;
+
 	m_slangGlobalSession->createSession(m_slangSessionDesc, slangSession.writeRef());
 
 	if (slangSession == nullptr)
@@ -92,13 +103,14 @@ void PipelineManager::CreatePipeline(const std::string& fileName, VkFormat depth
 	}
 	
 	// Check if file exists
-	fs::path p = fileName; // or fs::path(fileName)
+	fs::path p = filePath; // or fs::path(fileName)
 	if (!fs::exists(p) || !fs::is_regular_file(p)) {
-		Logger::Info("Shder file not found from working directory: ", std::filesystem::current_path(), fileName);
+		Logger::Info("Shder file not found from working directory: ", std::filesystem::current_path(), filePath);
 		throw std::runtime_error("Shader file not found: " + fs::absolute(p).string());
 	}
+
 	Slang::ComPtr<ISlangBlob> diagnostics;
-	Slang::ComPtr slangModule{ slangSession->loadModuleFromSource("triangle", fileName.c_str(), nullptr, diagnostics.writeRef()) };
+	Slang::ComPtr slangModule{ slangSession->loadModule(fileName.string().c_str(), diagnostics.writeRef())};
 
 	if (slangModule == nullptr)
 	{
@@ -110,8 +122,8 @@ void PipelineManager::CreatePipeline(const std::string& fileName, VkFormat depth
 		{
 			msg = "No diagnostic output available.";
 		}
-		Logger::Error("Slang compilation failed for ", fileName, ":\n", msg);
-		throw std::runtime_error("Slang compilation failed for " + fileName + ":\n" + msg);
+		Logger::Error("Slang compilation failed for ", filePath, ":\n", msg);
+		throw std::runtime_error("Slang compilation failed for " + filePath + ":\n" + msg);
 	}
 
 	Slang::ComPtr<ISlangBlob> spirv;
@@ -124,8 +136,8 @@ void PipelineManager::CreatePipeline(const std::string& fileName, VkFormat depth
 		{
 			msg = std::string(static_cast<const char*>(diagnostics->getBufferPointer()), diagnostics->getBufferSize());
 		}
-		Logger::Error("SPIR-V generation failed for ", fileName, ":\n", msg);
-		throw std::runtime_error("SPIR-V generation failed for " + fileName + ":\n" + msg);
+		Logger::Error("SPIR-V generation failed for ", filePath, ":\n", msg);
+		throw std::runtime_error("SPIR-V generation failed for " + filePath + ":\n" + msg);
 	}
 
 	// Create shader module from SPIR-V code
@@ -261,7 +273,7 @@ void PipelineManager::CreatePipeline(const std::string& fileName, VkFormat depth
 
 	pipelineObject.pipeline = pipeline;
 	pipelineObject.pipelineLayout = pipelineLayout;
-	m_pipelines[fileName] = pipelineObject;
+	m_pipelines[filePath] = pipelineObject;
 
-	Logger::Success("Pipeline for ", fileName, " created successfully!");
+	Logger::Success("Pipeline for ", filePath, " created successfully!");
 }
