@@ -17,19 +17,14 @@ void AccelerationStructure::CreateBLASForMeshes()
 
     const VkDeviceAddress vertexAddress = GPUResourceUploader::GetVertexAddress();
     const VkDeviceAddress indexAddress = GPUResourceUploader::GetIndexAddress();
-    printf("BLAS vertex address: 0x%llX\n",
-    static_cast<unsigned long long>(vertexAddress));
-    // Get
+
     uint32_t totalMeshCount = 0;
-    for (const Model& model : models) for (const Mesh& mesh : model.meshes) totalMeshCount++;
+    for (const Model& model : models) for ([[maybe_unused]] const Mesh& mesh : model.meshes) totalMeshCount++;
     
     // Create a bottom level acceleration structure for each mesh
     m_geometries.reserve(totalMeshCount);
     m_primitiveCounts.reserve(totalMeshCount);
     m_blas.reserve(totalMeshCount);
-    printf("m_geometries size: %zu capacity: %zu\n",
-    m_geometries.size(),
-    m_geometries.capacity());
     for (const Model& model : models)
     {
         for (const Mesh& mesh : model.meshes)
@@ -430,17 +425,17 @@ void AccelerationStructure::BuildAccelerationStructures()
     m_pfnCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &tlasBuildInfo, &tlasBuildRangeInfoPointer);
 
     // Create pipeline memory barrier
-    VkMemoryBarrier2 tlasToRayTracingBarrier{};
-    tlasToRayTracingBarrier.sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
-    tlasToRayTracingBarrier.srcStageMask  = VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR;
-    tlasToRayTracingBarrier.srcAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
-    tlasToRayTracingBarrier.dstStageMask  = VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR;
-    tlasToRayTracingBarrier.dstAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR;
+    VkMemoryBarrier2 tlasToFragmentBarrier{};
+    tlasToFragmentBarrier.sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
+    tlasToFragmentBarrier.srcStageMask  = VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR;
+    tlasToFragmentBarrier.srcAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
+    tlasToFragmentBarrier.dstStageMask  = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    tlasToFragmentBarrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
 
     VkDependencyInfo dependencyInfo2{};
     dependencyInfo2.sType                    = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
     dependencyInfo2.memoryBarrierCount       = 1;
-    dependencyInfo2.pMemoryBarriers          = &tlasToRayTracingBarrier;
+    dependencyInfo2.pMemoryBarriers          = &tlasToFragmentBarrier;
 
     vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo2);
     
@@ -463,5 +458,75 @@ void AccelerationStructure::BuildAccelerationStructures()
 
     vkQueueWaitIdle(VulkanCore::GetQueue());
 
+    // Destroy commandPool and commandBuffer
+    vkFreeCommandBuffers(VulkanCore::GetDevice(), commandPool, 1, &commandBuffer);
+    vkDestroyCommandPool(VulkanCore::GetDevice(), commandPool, nullptr);
+    
     Logger::Success("Acceleration structures built!");
+}
+
+void AccelerationStructure::DestroyAccelerationStructures()
+{
+    VkDevice device = VulkanCore::GetDevice();
+    VmaAllocator allocator = VulkanCore::GetAllocator();
+
+    const auto pfnDestroyAccelerationStructureKHR =
+        reinterpret_cast<PFN_vkDestroyAccelerationStructureKHR>(
+            vkGetDeviceProcAddr(device, "vkDestroyAccelerationStructureKHR"));
+
+    // Destroy TLAS handle first (TLAS depends on BLAS)
+    if (m_tlas.handle != VK_NULL_HANDLE)
+    {
+        pfnDestroyAccelerationStructureKHR(device, m_tlas.handle, nullptr);
+        m_tlas.handle = VK_NULL_HANDLE;
+    }
+
+    // Destroy BLAS handles
+    for (BLAS& blas : m_blas)
+    {
+        if (blas.handle != VK_NULL_HANDLE)
+        {
+            pfnDestroyAccelerationStructureKHR(device, blas.handle, nullptr);
+            blas.handle = VK_NULL_HANDLE;
+        }
+    }
+
+    // Destroy TLAS buffer before BLAS buffers
+    if (m_tlas.buffer != VK_NULL_HANDLE)
+    {
+        vmaDestroyBuffer(allocator, m_tlas.buffer, m_tlas.allocation);
+        m_tlas.buffer = VK_NULL_HANDLE;
+        m_tlas.allocation = VK_NULL_HANDLE;
+    }
+
+    // Destroy BLAS buffers
+    for (BLAS& blas : m_blas)
+    {
+        if (blas.buffer != VK_NULL_HANDLE)
+        {
+            vmaDestroyBuffer(allocator, blas.buffer, blas.allocation);
+            blas.buffer = VK_NULL_HANDLE;
+            blas.allocation = VK_NULL_HANDLE;
+        }
+    }
+    
+    // Destroy scratch and instance buffers
+    if (m_blasScratchBuffer != VK_NULL_HANDLE)
+    {
+        vmaDestroyBuffer(allocator, m_blasScratchBuffer, m_blasScratchBufferAllocation);
+        m_blasScratchBuffer = VK_NULL_HANDLE;
+        m_blasScratchBufferAllocation = VK_NULL_HANDLE;
+    }
+    if (m_tlasScratchBuffer != VK_NULL_HANDLE)
+    {
+        vmaDestroyBuffer(allocator, m_tlasScratchBuffer, m_tlasScratchBufferAllocation);
+        m_tlasScratchBuffer = VK_NULL_HANDLE;
+        m_tlasScratchBufferAllocation = VK_NULL_HANDLE;
+    }
+    if (m_instanceDataBuffer != VK_NULL_HANDLE)
+    {
+        vmaDestroyBuffer(allocator, m_instanceDataBuffer, m_instanceDataBufferAllocation);
+        m_instanceDataBuffer = VK_NULL_HANDLE;
+        m_instanceDataBufferAllocation = VK_NULL_HANDLE;
+    }
 }

@@ -90,11 +90,11 @@ void PipelineManager::CreatePipeline(const std::string& fileName, VkFormat depth
 	{
 		Logger::Error("Slang session is null!!");
 	}
-
+	
 	// Check if file exists
 	fs::path p = fileName; // or fs::path(fileName)
 	if (!fs::exists(p) || !fs::is_regular_file(p)) {
-		Logger::Info(std::filesystem::current_path());
+		Logger::Info("Shder file not found from working directory: ", std::filesystem::current_path(), fileName);
 		throw std::runtime_error("Shader file not found: " + fs::absolute(p).string());
 	}
 	Slang::ComPtr<ISlangBlob> diagnostics;
@@ -150,7 +150,7 @@ void PipelineManager::CreatePipeline(const std::string& fileName, VkFormat depth
 
 	// Create layout for the graphics pipeline
 	VkPushConstantRange pushConstantRange {};
-	pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 	pushConstantRange.offset = 0;
 	pushConstantRange.size = sizeof(PushConstants);
 	

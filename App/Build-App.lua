@@ -34,8 +34,8 @@ project "App"
     objdir ("../Binaries/Intermediates/" .. OutputDir .. "/%{prj.name}")
 
     postbuildcommands {
-        'if not exist "%{cfg.targetdir}\\..\\Resources" mkdir "%{cfg.targetdir}\\..\\Resources"',         -- Make resource folder if it does not exist
-        'xcopy "%{prj.location}\\..\\Resources\\*" "%{cfg.targetdir}\\..\\Resources\\" /Q /E /Y /I > nul', -- Copy all resources to build folder
+        'if not exist "%{cfg.targetdir}\\Resources" mkdir "%{cfg.targetdir}\\Resources"',         -- Make resource folder if it does not exist
+        'xcopy "%{prj.location}\\Resources\\*" "%{cfg.targetdir}\\Resources\\" /Q /E /Y /I > nul', -- Copy all resources to build folder
         '{COPY} "../Dependencies/SDL2/lib/x64/SDL2.dll" "%{cfg.targetdir}"' -- Copy SDL2.dll to app folder
     }
     

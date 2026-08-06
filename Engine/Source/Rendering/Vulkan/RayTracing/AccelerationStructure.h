@@ -29,7 +29,8 @@ public:
     static void CreateBLASForMeshes();
     static void CreateHLASForMeshes();
     static void BuildAccelerationStructures();
-    
+    static void DestroyAccelerationStructures();
+
     static VkAccelerationStructureKHR* GetTLAS() { return &m_tlas.handle; }
     
 private:

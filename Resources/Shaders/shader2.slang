@@ -8,6 +8,8 @@ struct Vertex
 // Per-Instance Data
 struct InstanceData {
     float4x4 modelMatrix; // Transform of this instance
+    float2   uvTiling;
+    float2   padding;
 };
 
 // Per-Mesh Render Data
@@ -23,6 +25,7 @@ struct RenderData
 
 struct PushConstants {
     float4x4 viewProjection;
+    float4   lightDirection;
 };
 
 [[vk::push_constant]]
@@ -40,6 +43,9 @@ StructuredBuffer<RenderData> g_RenderDatas;
 [[vk::binding(3, 0)]]
 StructuredBuffer<InstanceData> g_Instances;
 
+[[vk::binding(4, 0)]]
+RaytracingAccelerationStructure g_AccelerationStructure;
+
 [[vk::binding(5, 0)]]
 SamplerState g_Sampler;
 
@@ -51,8 +57,8 @@ struct VSOutput
     float4 position : SV_POSITION;
     float3 normal : NORMAL;
     float2 uv : TEXCOORD0;
-    [[vk::flat]]
     uint32_t textureIndex : TEXCOORD1;
+    float3 worldPosition : TEXCOORD2;
 };
 
 [shader("vertex")]
@@ -75,22 +81,54 @@ VSOutput main(uint32_t vertexID: SV_VertexID, uint32_t instanceID: SV_InstanceID
     output.position = mul(gPushConstants.viewProjection, worldPosition);
 
     output.normal = normalize(mul((float3x3)instance.modelMatrix, v.normal.xyz));
-    output.uv = v.uv.xy;
+    output.uv = v.uv.xy * instance.uvTiling;
     output.textureIndex = renderData.textureIndex;
-
+    output.worldPosition = worldPosition.xyz;
     return output;
+}
+
+static const float EPSILON = 0.01;
+
+bool InShadow(float3 P, float3 lightDir)
+{
+    // Build the shadow ray from the world position toward the light
+    RayDesc shadowRayDesc;
+    shadowRayDesc.Origin = P;
+    shadowRayDesc.Direction = lightDir;
+    shadowRayDesc.TMin = EPSILON;
+    shadowRayDesc.TMax = 1e4;
+
+    // Initialize a ray query for shadows
+    RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> sq;
+    let rayFlags = RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH;
+
+    sq.TraceRayInline(g_AccelerationStructure, rayFlags, 0xFF, shadowRayDesc);
+
+    while (sq.Proceed())
+    {
+    }
+
+    // If the shadow ray intersects an opaque triangle, we consider the pixel in shadow
+    bool hit = (sq.CommittedStatus() == COMMITTED_TRIANGLE_HIT);
+
+    return hit;
 }
 
 [shader("fragment")]
 float4 main(VSOutput input) : SV_TARGET
 {
     float3 normal = normalize(input.normal);
-    float3 lightDir = float3(0.5f, 0.5f, 0.5f);
+    float3 lightDir = normalize(gPushConstants.lightDirection.xyz);
 
-    float NdotL = max(dot(normal, normalize(lightDir)) * 0.5f + 0.5f, 0.5);
+    float NdotL = max(dot(normal, lightDir) * 0.5f + 0.5f, 0.5);
     NdotL = smoothstep(0.3, 0.6, NdotL);
 
     float4 color = g_Textures[input.textureIndex].Sample(g_Sampler, input.uv);
 
-    return float4(color.xyz * NdotL.xxx, 1.0);
+    // Darken if in shadow
+    if (InShadow(input.worldPosition, lightDir)) {
+        color.rgb *= 0.1;
+    }
+
+    return float4(color.xyz, 1.0);
 }

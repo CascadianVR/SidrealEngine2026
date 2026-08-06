@@ -19,9 +19,9 @@ LogicalDevice::LogicalDevice(PhysicalDevice& physicalDevice)
 
 	std::vector<const char*> deviceExtensions = {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
 		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-		VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+		VK_KHR_RAY_QUERY_EXTENSION_NAME
 	};
 
 	VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures{};
@@ -35,11 +35,11 @@ LogicalDevice::LogicalDevice(PhysicalDevice& physicalDevice)
 
 	VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineFeatures{};
 	rayTracingPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
-	rayTracingPipelineFeatures.rayTracingPipeline = VK_TRUE;
+	//rayTracingPipelineFeatures.rayTracingPipeline = VK_TRUE;
 	rayTracingPipelineFeatures.pNext = &rayQueryFeatures;
 
 	VkPhysicalDeviceVulkan11Features features11{};
-	features11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+	features11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES; 
 	features11.shaderDrawParameters = VK_TRUE;
 	features11.pNext = &rayTracingPipelineFeatures;
 	

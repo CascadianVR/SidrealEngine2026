@@ -24,6 +24,7 @@ float pitch = -10.0f;
 glm::vec3 cameraPos   = glm::vec3(0.0f, 1.3f, 2.5f);
 glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
 glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+glm::vec3 lightPos = glm::vec3(0.5f, 1.0f, 0.5f);
 
 void VulkanCore::Initialize(const Window* window)
 {
@@ -38,11 +39,11 @@ void VulkanCore::Initialize(const Window* window)
 	CreateCommandBuffers();
 
 	
+	GPUResourceUploader::CreateDataBuffers(); // Create before pipeline
 	AccelerationStructure::CreateBLASForMeshes();
 	AccelerationStructure::CreateHLASForMeshes();
-	GPUResourceUploader::CreateDataBuffers(); // Create before pipeline
-	
-	//AccelerationStructure::BuildAccelerationStructures();
+	GPUResourceUploader::CreateDescriptorSet();
+	AccelerationStructure::BuildAccelerationStructures();
 	
 	PipelineManager::Initialize(m_logicalDevice.GetLogicalDevice());
 	PipelineManager::CreatePipeline("Resources/Shaders/shader2.slang", m_swapChain.GetDepthFormat());
@@ -177,6 +178,16 @@ void VulkanCore::Render()
 	
 	Pipeline& pipeline = PipelineManager::GetPipeline("Resources/Shaders/shader2.slang");
 	
+	// Bind descriptor sets
+	vkCmdBindDescriptorSets(
+		frameResource.commandBuffer,
+		VK_PIPELINE_BIND_POINT_GRAPHICS,
+		pipeline.pipelineLayout,
+		0, 1, GPUResourceUploader::GetDescriptorSet(),
+		0, nullptr
+	);
+	
+	
 	// Camera look
 	float dt = Application::GetDeltaTime();
 	yaw += static_cast<float>(Input::deltaMouseX) * 0.1f * dt * 60.0f;
@@ -190,35 +201,33 @@ void VulkanCore::Render()
 	
 	// Camera Move
 	constexpr float speed = 0.015f;
-	glm::vec3 cameraOffset{ 0.0f, 0.0f, 0.0f };
+	glm::vec3 offset{ 0.0f, 0.0f, 0.0f };
 	glm::vec3 right =
 	glm::normalize(glm::cross(cameraFront, glm::vec3(0, 1, 0)));
 	glm::vec3 up = glm::vec3(0, 1, 0);
-	if (Input::wKeyPressed) cameraOffset += cameraFront;
-	if (Input::sKeyPressed) cameraOffset -= cameraFront;
-	if (Input::aKeyPressed) cameraOffset -= right;
-	if (Input::dKeyPressed) cameraOffset += right;
-	if (Input::qKeyPressed) cameraOffset -= up;
-	if (Input::eKeyPressed) cameraOffset += up;
-	if (glm::length(cameraOffset) > 0.0f) cameraPos += glm::normalize(cameraOffset) * speed;
+	if (Input::wKeyPressed) offset += cameraFront;
+	if (Input::sKeyPressed) offset -= cameraFront;
+	if (Input::aKeyPressed) offset -= right;
+	if (Input::dKeyPressed) offset += right;
+	if (Input::qKeyPressed) offset -= up;
+	if (Input::eKeyPressed) offset += up;
+	
+	if (Input::rightMouseButtonPressed && glm::length(offset) > 0.0f)
+	{
+		lightPos += glm::normalize(offset) * speed;
+	}
+	else if (glm::length(offset) > 0.0f) cameraPos += glm::normalize(offset) * speed;
 	
 	// Calculate view and projection
 	glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
 	glm::mat4 projection = glm::perspectiveFov(glm::radians(45.0f), static_cast<float>(window->GetWidth()), static_cast<float>(window->GetHeight()), 0.1f, 100.0f);
 
-	// Bind descriptor sets
-	vkCmdBindDescriptorSets(
-		frameResource.commandBuffer,
-		VK_PIPELINE_BIND_POINT_GRAPHICS,
-		pipeline.pipelineLayout,
-		0, 1, GPUResourceUploader::GetDescriptorSet(),
-		0, nullptr
-	);
 	
 	// Push constants for camera
 	PushConstants pushConstants{};
 	pushConstants.viewProjection = projection * view;
-	vkCmdPushConstants(frameResource.commandBuffer, pipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), &pushConstants);
+	pushConstants.lightDirection = glm::vec4(glm::normalize(lightPos), 0.0f);
+	vkCmdPushConstants(frameResource.commandBuffer, pipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pushConstants);
 	
 	vkCmdBeginRendering(frameResource.commandBuffer, &renderingInfo);
 
@@ -347,12 +356,26 @@ void VulkanCore::CreateInstance()
 	}
 	extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 	
+	// Configure the best practices feature
+	VkValidationFeatureEnableEXT enabledFeatures[] = {
+		VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT
+	};
+
+	VkValidationFeaturesEXT validationFeatures = {};
+	validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+	validationFeatures.pNext = nullptr;
+	validationFeatures.enabledValidationFeatureCount = 1;
+	validationFeatures.pEnabledValidationFeatures = enabledFeatures;
+	validationFeatures.disabledValidationFeatureCount = 0;
+	validationFeatures.pDisabledValidationFeatures = nullptr;
+	
 	VkInstanceCreateInfo createInfo{};
 	createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	createInfo.pApplicationInfo = &appInfo;
 	createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
 	createInfo.ppEnabledExtensionNames = extensions.data();
-
+	createInfo.pNext = &validationFeatures;
+	
 	// List extensions being used
 	std::cout << "Available Vulkan extensions:\n";
 	uint32_t extensionCount = 0;
@@ -365,9 +388,12 @@ void VulkanCore::CreateInstance()
 	}
 
 	// Validation layers
-	const std::vector<const char*> validationLayers = {
-		"VK_LAYER_KHRONOS_validation"
-	};
+	std::vector<const char*> validationLayers;
+		
+	if (IsDebuggerPresent())
+	{
+		validationLayers.push_back("VK_LAYER_KHRONOS_validation");
+	}
 	createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
 	createInfo.ppEnabledLayerNames = validationLayers.data();
 
@@ -623,6 +649,8 @@ void VulkanCore::Shutdown()
 		vkDeviceWaitIdle(device);
 	}
 
+	AccelerationStructure::DestroyAccelerationStructures();
+	
 	// Cleanup swapchain related resources
 	CleanupSwapChain();
 

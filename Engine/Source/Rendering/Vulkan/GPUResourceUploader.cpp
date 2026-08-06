@@ -18,7 +18,6 @@ void GPUResourceUploader::CreateDataBuffers()
 	CreateRenderDataBuffer(models);
 	CreateTextureDataBuffer(textures);
 	CreateSampler();
-	CreateDescriptorSet();
 }
 
 void GPUResourceUploader::CreateVertexBuffer(std::vector<Model>& models) {
@@ -202,7 +201,10 @@ void GPUResourceUploader::CreateInstanceDataBuffer(const std::vector<Model>& mod
 		{
 			for (uint32_t j = 0; j < model.instanceCount; j++)
 			{
-				m_instanceData.emplace_back(InstanceData{ .modelMatrix = model.instanceMatrices[j] });
+				m_instanceData.emplace_back(InstanceData{
+					.modelMatrix = model.instanceMatrices[j],
+					.uvTiling = model.uvTiling
+				});
 			}
 		}
 	}
@@ -409,9 +411,9 @@ void GPUResourceUploader::CreateSampler()
 	samplerCI.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 	samplerCI.magFilter = VK_FILTER_LINEAR;
 	samplerCI.minFilter = VK_FILTER_LINEAR;
-	samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-	samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-	samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 	samplerCI.anisotropyEnable = VK_TRUE;
 	samplerCI.maxAnisotropy = 16.0f; // Should query VkPhysicalDeviceLimits::maxSamplerAnisotropy and clamp
 	samplerCI.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;

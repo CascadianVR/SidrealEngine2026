@@ -37,11 +37,14 @@ struct Model {
 	std::vector<glm::mat4> instanceMatrices = std::vector( { glm::mat4(1.0f) } );
 	uint32_t instanceCount = 1;
 	uint32_t instanceOffset;
+	glm::vec2 uvTiling = glm::vec2(1.0f, 1.0f);
 };
 
 // Per-Instance Data
 struct InstanceData {
 	glm::mat4 modelMatrix; // Transform of this instance
+	glm::vec2 uvTiling = glm::vec2(1.0f, 1.0f);
+	float padding[2];
 };
 
 // Per-Mesh Render Data
@@ -63,6 +66,7 @@ struct Pipeline {
 
 struct PushConstants {
 	glm::mat4 viewProjection;
+	glm::vec4 lightDirection;
 };
 
 struct ShaderData {

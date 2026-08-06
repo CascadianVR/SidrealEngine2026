@@ -9,6 +9,7 @@
 class GPUResourceUploader {
 public:
 	static void CreateDataBuffers();
+	static void CreateDescriptorSet();
 
 	static std::vector<RenderData>& GetRenderData() { return m_renderData; }
 	static VkDescriptorSetLayout* GetDescriptorSetLayout() { return &m_descriptorSetLayout; }
@@ -35,7 +36,6 @@ private:
 	static void CreateInstanceDataBuffer(const std::vector<Model>& models);
 	static void CreateTextureDataBuffer(const std::vector<Texture>& textures);
 	static void CreateSampler();
-	static void CreateDescriptorSet();
 
 	static inline std::vector<RenderData> m_renderData;
 	static inline std::vector<InstanceData> m_instanceData;

@@ -7,35 +7,16 @@
       "path": "Resources\\Models\\Cascadia.glb",
       "position": [ 0, 0.0, 0.0 ],
       "rotation": [ 0.0, 0.0, 0.0 ],
-      "scale":    [ 1.0, 1.0, 1.0 ]
+      "scale":    [ 1.0, 1.0, 1.0 ],
+      "uvTiling": [ 1.0, 1.0 ]
     },
     {
       "name": "Quad",
       "path": "N/A",
-      "position": [ -0.5, 0.0, 0.5 ],
+      "position": [ 0.0, 0.0, 0.0 ],
       "rotation": [ -90.0, 0.0, 0.0 ],
-      "scale":    [ 1.0, 1.0, 1.0 ]
-    },
-    {
-      "name": "Quad",
-      "path": "N/A",
-      "position": [ 0.5, 0.0, 0.5 ],
-      "rotation": [ -90.0, 0.0, 0.0 ],
-      "scale":    [ 1.0, 1.0, 1.0 ]
-    },
-    {
-      "name": "Quad",
-      "path": "N/A",
-      "position": [ -0.5, 0.0, -0.5 ],
-      "rotation": [ -90.0, 0.0, 0.0 ],
-      "scale":    [ 1.0, 1.0, 1.0 ]
-    },
-    {
-      "name": "Quad",
-      "path": "N/A",
-      "position": [ 0.5, 0.0, -0.5 ],
-      "rotation": [ -90.0, 0.0, 0.0 ],
-      "scale":    [ 1.0, 1.0, 1.0 ]
+      "scale":    [ 5.0, 5.0, 5.0 ],
+      "uvTiling": [ 5.0, 5.0 ]
     }
   ]
 }

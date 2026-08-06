@@ -103,6 +103,15 @@ void Loader::LoadScene(const std::string& fileName)
 		}
 		const json& scale = sceneObject["scale"];
 		glm::vec3 modelScale = { scale[0].get<float>(),scale[1].get<float>(),scale[2].get<float>() };
+		
+		// Model UV tiling
+		if (!sceneObject.contains("uvTiling") || !sceneObject["uvTiling"].is_array() || sceneObject["uvTiling"].size() != 2)
+		{
+			Logger::Warn("Skipping scene object without valid \"uvTiling\" field: ", sceneObject.dump());
+			continue;
+		}
+		const json& uvTiling = sceneObject["uvTiling"];
+		glm::vec2 modelUvTiling = { scale[0].get<float>(),scale[1].get<float>() };
 
 		// Construct model matrix
 		modelMatrix = glm::translate(glm::mat4(1.0f), modelPosition);
@@ -116,6 +125,7 @@ void Loader::LoadScene(const std::string& fileName)
 		{
 			Model model;
 			model.instanceMatrices = { modelMatrix };
+			model.uvTiling = modelUvTiling;
 			Primitives::GetPrimitive(primitiveIndex, model);
 			m_loadedModels.push_back(model);
 		}
@@ -200,7 +210,7 @@ void Loader::LoadFallbackTexture(const std::string& fileName)
 		Logger::Success("Loaded fallback texture: ", w, "x", h, " RGBA");
 		stbi_image_free(pixels);
 	}
-	else
+	else 
 	{
 		Logger::Error("Failed to decode fallback texture: ", stbi_failure_reason());
 	}
