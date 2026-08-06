@@ -21,6 +21,8 @@ void Application::Initialize()
 
 void Application::Update()
 {
+	m_frameCount += 1;
+	
 	// Time and delta time
 	const auto currentTime = std::chrono::system_clock::now();
 	const std::chrono::duration<float> elapsed = currentTime - m_lastTime;

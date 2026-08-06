@@ -227,6 +227,7 @@ void VulkanCore::Render()
 	PushConstants pushConstants{};
 	pushConstants.viewProjection = projection * view;
 	pushConstants.lightDirection = glm::vec4(glm::normalize(lightPos), 0.0f);
+	pushConstants.frameIndex = Application::GetFrameCount();
 	vkCmdPushConstants(frameResource.commandBuffer, pipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pushConstants);
 	
 	vkCmdBeginRendering(frameResource.commandBuffer, &renderingInfo);
@@ -576,8 +577,6 @@ void VulkanCore::RecreateSwapChain()
 			SDL_GetWindowSize(Application::GetWindow()->GetSDLWindow(), &width, &height);
 		}
 	}
-
-	Logger::Info("Recreating swapchain with dimensions: ", width, " x ", height);
 	
 	// Wait for device idle and cleanup old swapchain-dependent resources
 	CleanupSwapChain();

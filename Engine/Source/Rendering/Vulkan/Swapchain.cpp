@@ -6,11 +6,24 @@
 
 Swapchain::Swapchain(VkSurfaceKHR& surface, PhysicalDevice& physicalDevice, LogicalDevice& logicalDevice, VmaAllocator& allocator, unsigned int width, unsigned int height)
 {
-	m_width = width;
-	m_height = height;
 	m_device = logicalDevice.GetLogicalDevice();
 	m_allocator = allocator;
 	uint32_t familyIndex = physicalDevice.GetGraphicsQueueFamilyIndex();
+
+	VkSurfaceCapabilitiesKHR surfaceCapabilities;
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice.GetPhysicalDevice(), surface, &surfaceCapabilities);
+
+	VkExtent2D extent;
+	if (surfaceCapabilities.currentExtent.width != UINT32_MAX)
+	{
+		extent = surfaceCapabilities.currentExtent;
+	}
+	else
+	{
+		extent = { width, height };
+	}
+	m_width = extent.width;
+	m_height = extent.height;
 
 	VkSwapchainCreateInfoKHR swapChainCreateInfo {};
 	swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -20,7 +33,7 @@ Swapchain::Swapchain(VkSurfaceKHR& surface, PhysicalDevice& physicalDevice, Logi
 	swapChainCreateInfo.minImageCount = VulkanCore::MinSwapChainImages;
 	swapChainCreateInfo.imageFormat = VK_FORMAT_B8G8R8A8_SRGB;
 	swapChainCreateInfo.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-	swapChainCreateInfo.imageExtent = { width, height };
+	swapChainCreateInfo.imageExtent = extent;
 	swapChainCreateInfo.imageArrayLayers = 1;
 	swapChainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -91,9 +104,7 @@ Swapchain::Swapchain(VkSurfaceKHR& surface, PhysicalDevice& physicalDevice, Logi
 		}
 	}
 	m_depthFormat = depthFormat;
-
-	Logger::Info("Depth format selected : ", depthFormat);
-
+	
 	// Create depth image
 	VkImageCreateInfo depthImageCreateInfo {};
 	depthImageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;

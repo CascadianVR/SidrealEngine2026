@@ -67,6 +67,10 @@ struct Pipeline {
 struct PushConstants {
 	glm::mat4 viewProjection;
 	glm::vec4 lightDirection;
+	uint32_t frameIndex;
+	uint32_t padding1;
+	uint32_t padding2;
+	uint32_t padding3;
 };
 
 struct ShaderData {

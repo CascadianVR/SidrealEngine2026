@@ -13,11 +13,13 @@ public:
 	static Window* GetWindow() { return m_window.get(); }
 	static float GetDeltaTime() { return m_deltaTime; }
 	static double GetElapsedTime() { return m_elapsedTime; }
+	static uint32_t GetFrameCount() { return m_frameCount; }
 
 private:
 	static inline std::unique_ptr<Window> m_window;
 	static inline std::chrono::system_clock::time_point m_lastTime;
 	static inline float m_deltaTime;
 	static inline double m_elapsedTime;
+	static inline uint32_t m_frameCount = 0;
 
 };

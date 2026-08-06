@@ -26,6 +26,10 @@ struct RenderData
 struct PushConstants {
     float4x4 viewProjection;
     float4   lightDirection;
+    uint32_t frameIndex;
+    uint32_t padding1;
+    uint32_t padding2;
+    uint32_t padding3;
 };
 
 [[vk::push_constant]]
@@ -87,16 +91,75 @@ VSOutput main(uint32_t vertexID: SV_VertexID, uint32_t instanceID: SV_InstanceID
     return output;
 }
 
-static const float EPSILON = 0.01;
+static const float MinRayDistance = 0.01f;
+static const float MaxRayDistance = 1e4f;
 
-bool InShadow(float3 P, float3 lightDir)
+float2 Hash2D(uint32_t seed)
+{
+    seed = (seed ^ 61u) ^ (seed >> 16u);
+    seed *= 9u;
+    seed = seed ^ (seed >> 4u);
+    seed *= 0x27d4eb2du;
+    seed = seed ^ (seed >> 15u);
+    float a = float(seed & 0xFFFF) / 65535.0;
+    float b = float((seed >> 16) & 0xFFFF) / 65535.0;
+    return float2(a, b);
+}
+
+// Build an orthonormal basis around a direction
+void BuildBasis(float3 n, out float3 t, out float3 b)
+{
+    float3 up = abs(n.z) < 0.999 ? float3(0, 0, 1) : float3(1, 0, 0);
+    t = normalize(cross(up, n));
+    b = cross(n, t);
+}
+
+static const uint32_t ShadowSampleCount = 32;
+float SoftShadow(float3 P, float3 geometricNormal, float3 lightDir, float lightRadius, uint2 pixelCoord, uint32_t frameIndex)
+{
+    float3 tangent, bitangent;
+    BuildBasis(lightDir, tangent, bitangent);
+
+    float3 origin = P + geometricNormal * 0.01;
+    float occlusion = 0.0;
+
+    for (uint32_t i = 0; i < ShadowSampleCount; i++)
+    {
+        // Jitter seed: unique per pixel, per sample, per frame (for temporal accumulation)
+        uint32_t seed = pixelCoord.x * 1973u + pixelCoord.y * 9277u + i * 26699u + frameIndex * 3701u;
+        float2 xi = Hash2D(seed);
+
+        // Uniform sample on a disk, scaled by light radius
+        float r = sqrt(xi.x) * lightRadius;
+        float theta = xi.y * 6.2831853;
+        float3 jitteredDir = normalize(lightDir + tangent * (r * cos(theta)) + bitangent * (r * sin(theta)));
+
+        RayDesc shadowRayDesc;
+        shadowRayDesc.Origin = origin;
+        shadowRayDesc.Direction = jitteredDir;
+        shadowRayDesc.TMin = MinRayDistance;
+        shadowRayDesc.TMax = MaxRayDistance;
+
+        RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> sq;
+        let rayFlags = RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH;
+        sq.TraceRayInline(g_AccelerationStructure, rayFlags, 0xFF, shadowRayDesc);
+        while (sq.Proceed()) {}
+
+        if (sq.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+            occlusion += 1.0;
+    }
+
+    return occlusion / float(ShadowSampleCount); // 0 = fully lit, 1 = fully shadowed
+}
+
+bool HardShadow(float3 P, float3 lightDir)
 {
     // Build the shadow ray from the world position toward the light
     RayDesc shadowRayDesc;
     shadowRayDesc.Origin = P;
     shadowRayDesc.Direction = lightDir;
-    shadowRayDesc.TMin = EPSILON;
-    shadowRayDesc.TMax = 1e4;
+    shadowRayDesc.TMin = MinRayDistance;
+    shadowRayDesc.TMax = MaxRayDistance;
 
     // Initialize a ray query for shadows
     RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> sq;
@@ -125,10 +188,13 @@ float4 main(VSOutput input) : SV_TARGET
 
     float4 color = g_Textures[input.textureIndex].Sample(g_Sampler, input.uv);
 
-    // Darken if in shadow
-    if (InShadow(input.worldPosition, lightDir)) {
-        color.rgb *= 0.1;
-    }
+    //// Darken if in shadow
+    //if (HardShadow(input.worldPosition, lightDir)) {
+    //    color.rgb *= 0.1;
+    //}
 
-    return float4(color.xyz, 1.0);
+    float shadow = 1 - SoftShadow(input.worldPosition, normal, lightDir, 0.01f, uint2(input.position.xy), gPushConstants.frameIndex);
+    shadow = clamp(shadow, 0.1, 1.0);
+
+    return float4(color.xyz * shadow, 1.0);
 }
