@@ -16,7 +16,7 @@ Swapchain::Swapchain(VkSurfaceKHR& surface, PhysicalDevice& physicalDevice, Logi
 	swapChainCreateInfo.pNext = nullptr;
 	swapChainCreateInfo.flags = 0;
 	swapChainCreateInfo.surface = surface;
-	swapChainCreateInfo.minImageCount = 2; // Double buffering
+	swapChainCreateInfo.minImageCount = 3; // Triple buffering
 	swapChainCreateInfo.imageFormat = VK_FORMAT_B8G8R8A8_SRGB;
 	swapChainCreateInfo.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
 	swapChainCreateInfo.imageExtent = { width, height };
