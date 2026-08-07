@@ -100,138 +100,18 @@ void VulkanCore::Render()
 	commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 	vkBeginCommandBuffer(frameResource.commandBuffer, &commandBufferBeginInfo);
 
-	VkImageAspectFlags depthAspects = VK_IMAGE_ASPECT_DEPTH_BIT;
-	if (m_swapChain.GetDepthFormat() == VK_FORMAT_D32_SFLOAT_S8_UINT ||
-		m_swapChain.GetDepthFormat() == VK_FORMAT_D24_UNORM_S8_UINT)
-	{
-		depthAspects |= VK_IMAGE_ASPECT_STENCIL_BIT;
-	}
 
-	std::array<VkImageMemoryBarrier2, 2> outputBarriers{
-		VkImageMemoryBarrier2{
-			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-			.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-			.srcAccessMask = 0,
-			.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-			.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-			.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-			.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-			.image = m_swapChain.GetSwapChainImage(imageIndex),
-			.subresourceRange{.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1 }
-		},
-		VkImageMemoryBarrier2{
-			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-			.srcStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
-			.srcAccessMask = 0,
-			.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-			.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-			.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-			.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-			.image = m_swapChain.GetDepthImage(),
-			.subresourceRange{.aspectMask = depthAspects, .levelCount = 1, .layerCount = 1 }
-		}
-	};
-
-	VkDependencyInfo barrierDependencyInfo{};
-	barrierDependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-	barrierDependencyInfo.imageMemoryBarrierCount = 2;
-	barrierDependencyInfo.pImageMemoryBarriers = outputBarriers.data();
-
-	vkCmdPipelineBarrier2(frameResource.commandBuffer, &barrierDependencyInfo);
-
-	VkRenderingAttachmentInfo colorAttachmentInfo{
-		.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-		.imageView = m_swapChain.GetSwapChainImageView(imageIndex),
-		.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-		.clearValue{.color{ { 0.0f, 0.5f, 0.5f, 1.0f } }}
-	};
-	VkRenderingAttachmentInfo depthAttachmentInfo{
-		.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-		.imageView = m_swapChain.GetDepthImageView(),
-		.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-		.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-		.clearValue = {.depthStencil = {.depth = 1.0f,  .stencil = 0}}
-	};
-
-	VkRenderingInfo renderingInfo{
-		.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-		.renderArea{
-			.offset
-			{
-				.x = 0,
-				.y = 0
-			},
-			.extent
-			{
-				.width = static_cast<uint32_t>(m_swapChain.GetWidth()),
-				.height = static_cast<uint32_t>(m_swapChain.GetHeight())
-			}
-		},
-		.layerCount = 1,
-		.colorAttachmentCount = 1,
-		.pColorAttachments = &colorAttachmentInfo,
-		.pDepthAttachment = &depthAttachmentInfo,
-	};
+	TransitionToRendering(frameResource, imageIndex);
 	
+	// Bind the descriptor set containing buffers, textures, and other shader resources.
 	Pipeline& pipeline = PipelineManager::GetPipeline("Resources/Shaders/shader2.slang");
+	vkCmdBindDescriptorSets(frameResource.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipelineLayout, 0, 1, GPUResourceUploader::GetDescriptorSet(), 0, nullptr);
 	
-	// Bind descriptor sets
-	vkCmdBindDescriptorSets(
-		frameResource.commandBuffer,
-		VK_PIPELINE_BIND_POINT_GRAPHICS,
-		pipeline.pipelineLayout,
-		0, 1, GPUResourceUploader::GetDescriptorSet(),
-		0, nullptr
-	);
-	
-	
-	// Camera look
-	float dt = Application::GetDeltaTime();
-	yaw += static_cast<float>(Input::deltaMouseX) * 0.1f * dt * 60.0f;
-	pitch += -static_cast<float>(Input::deltaMouseY) * 0.1f * dt * 60.0f;
-	
-	glm::vec3 front;
-	front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-	front.y = sin(glm::radians(pitch));
-	front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-	cameraFront = glm::normalize(front);
-	
-	// Camera Move
-	constexpr float speed = 0.015f;
-	glm::vec3 offset{ 0.0f, 0.0f, 0.0f };
-	glm::vec3 right =
-	glm::normalize(glm::cross(cameraFront, glm::vec3(0, 1, 0)));
-	glm::vec3 up = glm::vec3(0, 1, 0);
-	if (Input::wKeyPressed) offset += cameraFront;
-	if (Input::sKeyPressed) offset -= cameraFront;
-	if (Input::aKeyPressed) offset -= right;
-	if (Input::dKeyPressed) offset += right;
-	if (Input::qKeyPressed) offset -= up;
-	if (Input::eKeyPressed) offset += up;
-	
-	if (Input::rightMouseButtonPressed && glm::length(offset) > 0.0f)
-	{
-		lightPos += glm::normalize(offset) * speed;
-	}
-	else if (glm::length(offset) > 0.0f) cameraPos += glm::normalize(offset) * speed;
-	
-	// Calculate view and projection
-	glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-	glm::mat4 projection = glm::perspectiveFov(glm::radians(45.0f), static_cast<float>(window->GetWidth()), static_cast<float>(window->GetHeight()), 0.1f, 100.0f);
+	UpdatePushConstants(frameResource, pipeline);
 
-	
-	// Push constants for camera
-	PushConstants pushConstants{};
-	pushConstants.viewProjection = projection * view;
-	pushConstants.lightDirection = glm::vec4(glm::normalize(lightPos), 0.0f);
-	pushConstants.frameIndex = Application::GetFrameCount();
-	vkCmdPushConstants(frameResource.commandBuffer, pipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pushConstants);
-	
-	vkCmdBeginRendering(frameResource.commandBuffer, &renderingInfo);
+	BeginRendering(frameResource, imageIndex);
 
+	// Set viewport dimensions
 	VkViewport viewport{};
 	viewport.x = 0;
 	viewport.y = static_cast<float>(window->GetHeight());
@@ -241,6 +121,7 @@ void VulkanCore::Render()
 	viewport.maxDepth = 1.0f;
 	vkCmdSetViewport(frameResource.commandBuffer, 0, 1, &viewport);
 
+	// Restrict rendering to the specified rectangular region and discard pixels outside.
 	VkRect2D scissor{};
 	scissor.extent = { 
 		.width = window->GetWidth(),
@@ -248,6 +129,7 @@ void VulkanCore::Render()
 	};
 	vkCmdSetScissor(frameResource.commandBuffer, 0, 1, &scissor);
 
+	// Bind the current graphics pipeline we want to use for drawing. (Shaders mainly)
 	vkCmdBindPipeline(frameResource.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline);
 
 	// Draw each mesh
@@ -260,6 +142,9 @@ void VulkanCore::Render()
 	
 	vkCmdEndRendering(frameResource.commandBuffer);
 
+	
+	// Make color attachment writes visible and wait for the swapchain iamge to 
+	// transition to VK_IMAGE_LAYOUT_PRESENT_SRC_KHR for presentation.
 	VkImageMemoryBarrier2 barrierPresent{};
 	barrierPresent.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
 	barrierPresent.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -278,17 +163,21 @@ void VulkanCore::Render()
 
 	vkCmdPipelineBarrier2(frameResource.commandBuffer, &barrierPresentDependencyInfo);
 	
+	
+	// End of recording commands to buffer
 	if (vkEndCommandBuffer(frameResource.commandBuffer) != VK_SUCCESS)
 	{
 		throw std::runtime_error("Failed to record command buffer");
 	}
 
+	
+	// Submit frame to be presented
 	VkSemaphoreSubmitInfo semaphoreAcquireWaitInfo{};
 	semaphoreAcquireWaitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
 	semaphoreAcquireWaitInfo.semaphore = imageAquireSemaphore;
 	semaphoreAcquireWaitInfo.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-	std::array<VkSemaphoreSubmitInfo, 2> semaphoreSignals{
+	
+	std::array semaphoreSignals{
 		VkSemaphoreSubmitInfo{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
 			.semaphore = m_renderFinishedSemaphores[imageIndex],
@@ -316,6 +205,9 @@ void VulkanCore::Render()
 	submitInfo.pSignalSemaphoreInfos = semaphoreSignals.data();
 
 	vkQueueSubmit2(m_queue, 1, &submitInfo, VK_NULL_HANDLE);
+	
+	
+	// Present frame
 	VkPresentInfoKHR presentInfo{};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	presentInfo.waitSemaphoreCount = 1;
@@ -362,13 +254,11 @@ void VulkanCore::CreateInstance()
 		VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT
 	};
 
-	VkValidationFeaturesEXT validationFeatures = {};
+	VkValidationFeaturesEXT validationFeatures{};
 	validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-	validationFeatures.pNext = nullptr;
 	validationFeatures.enabledValidationFeatureCount = 1;
 	validationFeatures.pEnabledValidationFeatures = enabledFeatures;
 	validationFeatures.disabledValidationFeatureCount = 0;
-	validationFeatures.pDisabledValidationFeatures = nullptr;
 	
 	VkInstanceCreateInfo createInfo{};
 	createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -481,6 +371,139 @@ void VulkanCore::CreateMemoryAllocator()
 	}
 
 	Logger::Success("Vulkan Memory Allocator (VMA) created successfully!");
+}
+
+void VulkanCore::TransitionToRendering(FrameResource& frameResource, uint32_t imageIndex)
+{
+	VkImageAspectFlags depthAspects = VK_IMAGE_ASPECT_DEPTH_BIT;
+	if (m_swapChain.GetDepthFormat() == VK_FORMAT_D32_SFLOAT_S8_UINT ||
+		m_swapChain.GetDepthFormat() == VK_FORMAT_D24_UNORM_S8_UINT)
+	{
+		depthAspects |= VK_IMAGE_ASPECT_STENCIL_BIT;
+	}
+
+	std::array<VkImageMemoryBarrier2, 2> outputBarriers{
+		VkImageMemoryBarrier2{
+			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+			.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.srcAccessMask = 0,
+			.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+			.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+			.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+			.image = m_swapChain.GetSwapChainImage(imageIndex),
+			.subresourceRange{.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1 }
+		},
+		VkImageMemoryBarrier2{
+			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+			.srcStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+			.srcAccessMask = 0,
+			.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+			.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+			.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+			.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+			.image = m_swapChain.GetDepthImage(),
+			.subresourceRange{.aspectMask = depthAspects, .levelCount = 1, .layerCount = 1 }
+		}
+	};
+
+	VkDependencyInfo barrierDependencyInfo{};
+	barrierDependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+	barrierDependencyInfo.imageMemoryBarrierCount = 2;
+	barrierDependencyInfo.pImageMemoryBarriers = outputBarriers.data();
+
+	// Transition the color and depth attachments into layouts for rendering.
+	vkCmdPipelineBarrier2(frameResource.commandBuffer, &barrierDependencyInfo);
+}
+
+void VulkanCore::UpdatePushConstants(FrameResource& frameResource, Pipeline& pipeline)
+{
+	// Camera look
+	float dt = Application::GetDeltaTime();
+	yaw += static_cast<float>(Input::deltaMouseX) * 0.2f * dt * 60.0f;
+	pitch += -static_cast<float>(Input::deltaMouseY) * 0.2f * dt * 60.0f;
+
+	glm::vec3 front;
+	front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+	front.y = sin(glm::radians(pitch));
+	front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+	cameraFront = glm::normalize(front);
+
+	// Camera Move
+	constexpr float speed = 0.015f;
+	glm::vec3 offset{ 0.0f, 0.0f, 0.0f };
+	glm::vec3 right =
+		glm::normalize(glm::cross(cameraFront, glm::vec3(0, 1, 0)));
+	glm::vec3 up = glm::vec3(0, 1, 0);
+	if (Input::wKeyPressed) offset += cameraFront;
+	if (Input::sKeyPressed) offset -= cameraFront;
+	if (Input::aKeyPressed) offset -= right;
+	if (Input::dKeyPressed) offset += right;
+	if (Input::qKeyPressed) offset -= up;
+	if (Input::eKeyPressed) offset += up;
+
+	if (Input::rightMouseButtonPressed && glm::length(offset) > 0.0f)
+	{
+		lightPos += glm::normalize(offset) * speed;
+	}
+	else if (glm::length(offset) > 0.0f) cameraPos += glm::normalize(offset) * speed;
+
+	// Calculate view and projection
+	glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+	Window* window = Application::GetWindow();
+	glm::mat4 projection = glm::perspectiveFov(glm::radians(45.0f), static_cast<float>(window->GetWidth()), static_cast<float>(window->GetHeight()), 0.1f, 100.0f);
+
+	// Update push constant data
+	PushConstants pushConstants{};
+	pushConstants.viewProjection = projection * view;
+	pushConstants.lightDirection = glm::vec4(glm::normalize(lightPos), 0.0f);
+	pushConstants.frameIndex = Application::GetFrameCount();
+	vkCmdPushConstants(frameResource.commandBuffer, pipeline.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pushConstants);
+
+}
+
+void VulkanCore::BeginRendering(FrameResource& frameResource, uint32_t imageIndex)
+{
+	VkRenderingAttachmentInfo colorAttachmentInfo{
+		.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+		.imageView = m_swapChain.GetSwapChainImageView(imageIndex),
+		.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+		.clearValue{.color{ { 0.0f, 0.5f, 0.5f, 1.0f } }}
+	};
+
+	VkRenderingAttachmentInfo depthAttachmentInfo{
+		.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+		.imageView = m_swapChain.GetDepthImageView(),
+		.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+		.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+		.clearValue = {.depthStencil = {.depth = 1.0f,  .stencil = 0}}
+	};
+
+	VkRenderingInfo renderingInfo{
+		.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+		.renderArea{
+			.offset
+			{
+				.x = 0,
+				.y = 0
+			},
+			.extent
+			{
+				.width = static_cast<uint32_t>(m_swapChain.GetWidth()),
+				.height = static_cast<uint32_t>(m_swapChain.GetHeight())
+			}
+		},
+		.layerCount = 1,
+		.colorAttachmentCount = 1,
+		.pColorAttachments = &colorAttachmentInfo,
+		.pDepthAttachment = &depthAttachmentInfo,
+	};
+
+	// Begin a dynamic rendering pass targeting the swapchain image.
+	vkCmdBeginRendering(frameResource.commandBuffer, &renderingInfo);
 }
 
 void VulkanCore::CreateCommandBuffers()

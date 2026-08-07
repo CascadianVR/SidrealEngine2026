@@ -15,18 +15,33 @@ class VulkanCore {
 public:
 	static void Initialize(const Window* window);
 	static void Render();
-	static VmaAllocator GetAllocator() { return m_allocator; }
 	
+	static VmaAllocator GetAllocator() { return m_allocator; }
 	static VkPhysicalDevice GetPhysicalDevice() { return m_physicalDevice.GetPhysicalDevice(); }
 	static VkDevice GetDevice() { return m_logicalDevice.GetLogicalDevice(); }
 	static uint32_t GetQueueFamilyIndex() { return m_physicalDevice.GetGraphicsQueueFamilyIndex(); }
 	static VkQueue GetQueue() { return m_queue; }
 	
-	static constexpr uint32_t MaxFramesInFlight = 2;
+	static constexpr uint32_t MaxFramesInFlight = 1;
 	static constexpr uint32_t MinSwapChainImages = 3; // Triple buffering
 	static constexpr int MAX_TEXTURES = 128;
+	
 private:
+	static void CreateInstance();
+	static void CreateDebugCallback();
+	static void CreateSurface(const Window* window);
+	static void CreateMemoryAllocator();
 
+	static void TransitionToRendering(FrameResource& frameResource, uint32_t imageIndex);
+	static void UpdatePushConstants(FrameResource& frameResource, Pipeline& pipeline);
+	static void BeginRendering(FrameResource& frameResource, uint32_t imageIndex);
+
+	static void Shutdown();
+	static void SetupDeviceQueueAndSemaphores();
+	static void CreateCommandBuffers();
+	static void CleanupSwapChain();
+	static void RecreateSwapChain();
+	
 	static inline PhysicalDevice m_physicalDevice;
 	static inline LogicalDevice m_logicalDevice;
 	static inline Swapchain m_swapChain;
@@ -45,14 +60,4 @@ private:
 	static inline std::vector<FrameResource> m_frameResources;
 	static inline VkSemaphore m_timelineSemaphore;
 	static inline uint32_t m_apiVersion;
-	
-	static void CreateInstance();
-	static void CreateDebugCallback();
-	static void CreateSurface(const Window* window);
-	static void CreateMemoryAllocator();
-	static void Shutdown();
-	static void SetupDeviceQueueAndSemaphores();
-	static void CreateCommandBuffers();
-	static void CleanupSwapChain();
-	static void RecreateSwapChain();
 };

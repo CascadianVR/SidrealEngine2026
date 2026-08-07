@@ -7,7 +7,7 @@ class PhysicalDevice {
 public:
 	PhysicalDevice() = default;
 	PhysicalDevice(const VkInstance& instance, const VkSurfaceKHR vulkanSurface);
-	~PhysicalDevice() {};
+	~PhysicalDevice() = default;
 
 	VkPhysicalDevice& GetPhysicalDevice() { return m_physicalDevice; }
 	uint32_t GetGraphicsQueueFamilyIndex() const { return m_graphicsQueueFamilyIndex; }
